@@ -46,11 +46,108 @@
 #define JANUS_AUTHOR			"Meetecho s.r.l."
 #define JANUS_SERVER_NAME		"MyJanusInstance"
 
+// @Treeleaf authentication url
+#define ANYDONE_AUTH_URL        "https://api.anydone.net/thirdparty/token/mediaserver"
+
 #ifdef __MACH__
 #define SHLIB_EXT "0.dylib"
 #else
 #define SHLIB_EXT ".so"
 #endif
+
+
+/**
+ * @Treeleaf
+ */
+static size_t write_memory_callback(void *contents, size_t size, size_t nmemb, void *userp){
+    size_t real_size = size * nmemb;
+    struct MemoryStruct *mem = (struct MemoryStruct *)userp;
+
+    mem->memory = realloc(mem->memory, mem->size + real_size + 1);
+    if(mem->memory == NULL) {
+        JANUS_LOG(LOG_ERR, "not enough memory (realloc returned NULL)\n");
+        return 0;
+    }
+
+    memcpy(&(mem->memory[mem->size]), contents, real_size);
+    mem->size += real_size;
+    mem->memory[mem->size] = 0;
+
+    return real_size;
+}
+
+MemoryStruct* call_request(CURL *curl, const char *url, char *user_data){
+    CURLcode res;
+    MemoryStruct *response_data = malloc(sizeof(MemoryStruct));
+    response_data->memory = malloc(1);  /* will be grown as needed by the realloc above */
+    response_data->size = 0;    /* no data at this point */
+
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, user_data);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) response_data);
+
+    /* Perform the request, res will get the return code */
+    res = curl_easy_perform(curl);
+
+    if (res != CURLE_OK)
+        JANUS_LOG(LOG_ERR, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+
+    /* always cleanup */
+    curl_easy_cleanup(curl);
+
+    return response_data;
+}
+
+json_t *load_json(const char *text) {
+    json_t *root;
+    json_error_t error;
+
+    root = json_loads(text, 0, &error);
+
+    if (root) {
+        return root;
+    } else {
+        JANUS_LOG(LOG_ERR, "json error on line %d: %s\n", error.line, error.text);
+        return (json_t *)0;
+    }
+}
+
+gboolean authenticate(const char *url, const char *user_data){
+    CURL *curl;
+    curl_global_init(CURL_GLOBAL_ALL);
+    curl = curl_easy_init();
+
+    if(!curl)
+        return FALSE;
+
+    char *encoded_token = curl_easy_escape(curl, "token", strlen("token"));
+    char *encoded_token_val = curl_easy_escape(curl, user_data, strlen(user_data));
+    char *post_data = (char*)malloc(strlen(encoded_token) + strlen(encoded_token_val) + 2);
+    strcpy(post_data, encoded_token);
+    strcat(post_data, "=");
+    strcat(post_data, encoded_token_val);
+    strcat(post_data, "\0");
+
+    /* all the response data will be eventually stored in response_data */
+    MemoryStruct *response_data = call_request(curl, url, post_data);
+
+    /* erase occupied memory */
+    free(response_data);
+    free(post_data);
+    curl_free(encoded_token);
+    curl_free(encoded_token_val);
+    curl_global_cleanup();
+
+    /* get http code and return 0 for success */
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    return http_code == 200;
+}
+/**
+ * @end Treeleaf
+ */
 
 
 static janus_config *config = NULL;
@@ -897,13 +994,23 @@ void janus_request_destroy(janus_request *request) {
 }
 
 static int janus_request_check_secret(janus_request *request, guint64 session_id, const gchar *transaction_text) {
+		json_t *root = request->message;
 	gboolean secret_authorized = FALSE, token_authorized = FALSE;
+
+/****************** @Treeleaf *************************************************************/
+json_t *secret = json_object_get(root, "apisecret");
+    const char *secret_str = (char*)json_string_value(secret);
+    if(secret)
+        secret_authorized = authenticate(ANYDONE_AUTH_URL, secret_str);
+
+    if(!secret_authorized)
+        return JANUS_ERROR_UNAUTHORIZED;
+/****************** @Treeleaf *************************************************************/
 	if(api_secret == NULL && !janus_auth_is_enabled()) {
 		/* Nothing to check */
 		secret_authorized = TRUE;
 		token_authorized = TRUE;
 	} else {
-		json_t *root = request->message;
 		if(api_secret != NULL) {
 			/* There's an API secret, check that the client provided it */
 			json_t *secret = json_object_get(root, "apisecret");

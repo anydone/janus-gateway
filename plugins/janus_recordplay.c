@@ -311,6 +311,13 @@ void janus_recordplay_hangup_media(janus_plugin_session *handle);
 void janus_recordplay_destroy_session(janus_plugin_session *handle, int *error);
 json_t *janus_recordplay_query_session(janus_plugin_session *handle);
 
+/****************** @Treeleaf *************************************************************/
+
+const char *join_str(const char *str[], size_t size);
+const char *format_file(size_t id, const char *type, const char *format);
+
+/****************** @Treeleaf *************************************************************/
+
 /* Plugin setup */
 static janus_plugin janus_recordplay_plugin =
 	JANUS_PLUGIN_INIT (
@@ -2005,6 +2012,48 @@ playdone:
 					gateway->notify_event(&janus_recordplay_plugin, session->handle, info);
 				}
 			}
+
+/****************** @Treeleaf *************************************************************/
+/***** Converts the .mjr into .webm and audio to .opus format ********************************/
+
+            const char base_path[] = "/opt/janus/share/janus/recordings";
+            const char *source_file_name_video = format_file(session->recording->id, "video", "mjr");
+            const char *dest_file_name_video = format_file(session->recording->id, "video", "webm");
+
+            const char *source_file_name_audio = format_file(session->recording->id, "audio", "mjr");
+            const char *dest_file_name_audio = format_file(session->recording->id, "audio", "opus");
+
+            size_t length = 8;
+            const char *command_video[] = {"janus-pp-rec ", base_path, "/", source_file_name_video, " ", base_path, "/",
+                                           dest_file_name_video};
+            const char *command_video_str = join_str(command_video, length);
+
+            const char *command_audio[] = {"janus-pp-rec ", base_path, "/", source_file_name_audio, " ", base_path, "/",
+                                           dest_file_name_audio};
+            const char *command_audio_str = join_str(command_audio, length);
+
+            int status_video = system(command_video_str);
+            if (status_video == 0)
+                JANUS_LOG(LOG_VERB, "Successfully converted video.\n");
+            else
+                JANUS_LOG(LOG_ERR, "Error in converting video. \n");
+
+            int status_audio = system(command_audio_str);
+            if (status_audio == 0)
+                JANUS_LOG(LOG_VERB, "Successfully converted audio. \n");
+            else
+                JANUS_LOG(LOG_ERR, "Error in converting audio. \n");
+
+            // releasing memory
+            free((char*)source_file_name_video);
+            free((char*)dest_file_name_video);
+            free((char*)source_file_name_audio);
+            free((char*)dest_file_name_audio);
+            free((char*)command_video_str);
+            free((char*)command_audio_str);
+
+/****************** @Treeleaf *************************************************************/
+
 			/* Tell the core to tear down the PeerConnection, hangup_media will do the rest */
 			gateway->close_pc(session->handle);
 		} else {
@@ -2926,4 +2975,42 @@ static void *janus_recordplay_playout_thread(void *sessiondata) {
 	JANUS_LOG(LOG_INFO, "Leaving playout thread\n");
 	g_thread_unref(g_thread_self());
 	return NULL;
+}
+
+/** @Treeleaf
+ * returns new string by concatenating the str array.
+ * @param str is array of character pointer
+ * @param size is length of array.
+ * @return
+ */
+const char *join_str(const char *str[], size_t size) {
+    if (size < 1)
+        return NULL;
+
+    size_t buffer_size = 0;
+    for (size_t i = 0; i < size; i++)
+        buffer_size += strlen(str[i]);
+
+    char *source_file_name = (char *) malloc(sizeof(char) * (buffer_size + 1));
+    strcpy(source_file_name, str[0]);
+    for (size_t i = 1; i < size; i++)
+        strcat(source_file_name, str[i]);
+
+    return source_file_name;
+}
+
+/**
+ * @Treeleaf
+ * @param id
+ * @param type ( it could be "video" or "audio" )
+ * @param format ( it could be format for audio and video like opus and webm )
+ * @return
+ */
+const char *format_file(size_t id, const char *type, const char *format) {
+    char id_str[256];
+    snprintf(id_str, sizeof id_str, "%zu", id);
+
+    size_t size = 6;
+    const char *str[] = {"rec-", id_str, "-", type, ".", format};
+    return join_str(str, size);
 }

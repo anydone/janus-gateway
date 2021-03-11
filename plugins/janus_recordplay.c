@@ -2016,30 +2016,26 @@ playdone:
 /****************** @Treeleaf *************************************************************/
 /***** Converts the .mjr into .webm and audio to .opus format ********************************/
 
-            const char base_path[] = "/opt/janus/share/janus/recordings";
             const char *source_file_name_video = format_file(session->recording->id, "video", "mjr");
             const char *dest_file_name_video = format_file(session->recording->id, "video", "webm");
 
             const char *source_file_name_audio = format_file(session->recording->id, "audio", "mjr");
             const char *dest_file_name_audio = format_file(session->recording->id, "audio", "opus");
 
-            size_t length = 8;
-            const char *command_video[] = {"janus-pp-rec ", base_path, "/", source_file_name_video, " ", base_path, "/",
+            const char *command_video[] = {"janus-pp-rec ", recordings_path, "/", source_file_name_video, " ", recordings_path, "/",
                                            dest_file_name_video};
-            const char *command_video_str = join_str(command_video, length);
+            const char *command_video_str = join_str(command_video, 8);
 
-            const char *command_audio[] = {"janus-pp-rec ", base_path, "/", source_file_name_audio, " ", base_path, "/",
+            const char *command_audio[] = {"janus-pp-rec ", recordings_path, "/", source_file_name_audio, " ", recordings_path, "/",
                                            dest_file_name_audio};
-            const char *command_audio_str = join_str(command_audio, length);
+            const char *command_audio_str = join_str(command_audio, 8);
 
-            int status_video = system(command_video_str);
-            if (status_video == 0)
+            if (system(command_video_str) == 0)
                 JANUS_LOG(LOG_VERB, "Successfully converted video.\n");
             else
                 JANUS_LOG(LOG_ERR, "Error in converting video. \n");
 
-            int status_audio = system(command_audio_str);
-            if (status_audio == 0)
+            if (system(command_audio_str) == 0)
                 JANUS_LOG(LOG_VERB, "Successfully converted audio. \n");
             else
                 JANUS_LOG(LOG_ERR, "Error in converting audio. \n");

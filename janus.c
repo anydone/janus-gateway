@@ -994,7 +994,7 @@ void janus_request_destroy(janus_request *request) {
 }
 
 static int janus_request_check_secret(janus_request *request, guint64 session_id, const gchar *transaction_text) {
-		json_t *root = request->message;
+    json_t *root = request->message;
 	gboolean secret_authorized = FALSE, token_authorized = FALSE;
 
 /****************** @Treeleaf *************************************************************/
@@ -1006,6 +1006,7 @@ json_t *secret = json_object_get(root, "apisecret");
     if(!secret_authorized)
         return JANUS_ERROR_UNAUTHORIZED;
 /****************** @Treeleaf *************************************************************/
+
 	if(api_secret == NULL && !janus_auth_is_enabled()) {
 		/* Nothing to check */
 		secret_authorized = TRUE;

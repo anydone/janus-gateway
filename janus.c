@@ -977,6 +977,7 @@ void janus_request_destroy(janus_request *request) {
 static int janus_request_check_secret(janus_request *request, guint64 session_id, const gchar *transaction_text) {
     json_t *root = request->message;
 	gboolean secret_authorized = FALSE;
+    gboolean token_authorized = FALSE;
 
     json_t *secret = json_object_get(root, "apisecret");
     const char *secret_str = (char*)json_string_value(secret);
@@ -984,6 +985,20 @@ static int janus_request_check_secret(janus_request *request, guint64 session_id
         secret_authorized = authenticate(anydone_auth_url, secret_str);
 
     if(!secret_authorized)
+        return JANUS_ERROR_UNAUTHORIZED;
+
+    /* Check whether token authorization is enable if yes check it. */
+    if(!janus_auth_is_enabled()){
+        token_authorized = TRUE;
+    }
+    else{
+        /* The token based authentication mechanism is enabled, check that the client provided it */
+        json_t *token = json_object_get(root, "token");
+        if(token && json_is_string(token) && janus_auth_check_token(json_string_value(token))) {
+            token_authorized = TRUE;
+        }
+    }
+    if(!token_authorized)
         return JANUS_ERROR_UNAUTHORIZED;
 
     return 0;

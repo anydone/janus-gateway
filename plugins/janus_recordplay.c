@@ -314,7 +314,7 @@ json_t *janus_recordplay_query_session(janus_plugin_session *handle);
 /****************** @Treeleaf *************************************************************/
 
 const char *join_str(const char *str[], size_t size);
-const char *format_file(size_t id, const char *type, const char *format);
+const char *format_file(gint64 id, const char *type, const char *format);
 
 /****************** @Treeleaf *************************************************************/
 
@@ -3002,11 +3002,10 @@ const char *join_str(const char *str[], size_t size) {
  * @param format ( it could be format for audio and video like opus and webm )
  * @return
  */
-const char *format_file(size_t id, const char *type, const char *format) {
-    char id_str[256];
-    snprintf(id_str, sizeof id_str, "%zu", id);
+const char *format_file(gint64 id, const char *type, const char *format) {
+    char id_str[64];
+    snprintf(id_str, sizeof id_str, "%ld", id);
 
-    size_t size = 6;
     const char *str[] = {"rec-", id_str, "-", type, ".", format};
-    return join_str(str, size);
+    return join_str(str, 6);
 }

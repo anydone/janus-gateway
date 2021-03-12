@@ -257,13 +257,14 @@ gboolean authenticate(const char *url, const char *user_data){
     MemoryStruct *response_data = call_request(curl, url, post_data);
 
     /* erase occupied memory */
+    free(response_data->memory);
     free(response_data);
     free(post_data);
     curl_free(encoded_token);
     curl_free(encoded_token_val);
     curl_global_cleanup();
 
-    /* get http code and return 0 for success */
+    /* get http code and return TRUE for success */
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     return (http_code == 200)? TRUE: FALSE;

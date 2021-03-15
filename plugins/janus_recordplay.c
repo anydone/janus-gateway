@@ -2033,12 +2033,11 @@ playdone:
 
             if ((system(command_video_str) == 0) && (system(command_audio_str) == 0)){
                 struct stat st = {0};
-
-                char path[128];
+                char path[128] = "";
                 strcpy(path, recordings_path);
                 strcat(path, "/videos");
                 if(stat(path, &st) == -1){
-                    mkdir(path, 0700);
+                    mkdir(path, 0770);
                 }
 
                 const char *merge_command[] = {"sudo ffmpeg -i ", recordings_path, "/", dest_file_name_audio, " -i ", recordings_path, "/", dest_file_name_video, " -c:v copy -c:a opus -strict experimental ", recordings_path, "/videos/", dest_file_name_video};

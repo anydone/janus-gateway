@@ -2031,38 +2031,22 @@ playdone:
                                            dest_file_name_audio};
             const char *command_audio_str = join_str(command_audio, 8);
 
-            if ((system(command_video_str) == 0) && (system(command_audio_str) == 0)){
-                struct stat st = {0};
-                char path[128] = "";
-                strcpy(path, recordings_path);
-                strcat(path, "/videos");
-                if(stat(path, &st) == -1){
-                    mkdir(path, 0770);
-                }
+            struct stat st = {0};
+            char path[128] = "";
+            strcpy(path, recordings_path);
+            strcat(path, "/videos");
+            if(stat(path, &st) == -1)
+                mkdir(path, 0770);
 
-                const char *merge_command[] = {"sudo ffmpeg -i ", recordings_path, "/", dest_file_name_audio, " -i ", recordings_path, "/", dest_file_name_video, " -c:v copy -c:a opus -strict experimental ", recordings_path, "/videos/", dest_file_name_video};
-                const char *audio_video_merge = join_str(merge_command, 12);
-                if(system(audio_video_merge) == 0)
-                    JANUS_LOG(LOG_VERB, "Successfully merged audio and video %s\n", dest_file_name_video);
-                else
-                    JANUS_LOG(LOG_ERR, "Error in merging %s\n", dest_file_name_video);
+            const char *merge_command[] = {"sudo ffmpeg -i ", recordings_path, "/", dest_file_name_audio, " -i ", recordings_path, "/", dest_file_name_video, " -c:v copy -c:a opus -strict experimental ", recordings_path, "/videos/", dest_file_name_video};
+            const char *merge_command_str = join_str(merge_command, 12);
+            const char *commands[] = {command_audio_str, "&&", command_video_str, "&&", merge_command_str};
+            const char *commands_str = join_str(commands, 5);
 
-                free((char*)audio_video_merge);
-
-                const char *rm_webm_arr[] = {"sudo rm ", recordings_path, "/", dest_file_name_video};
-                const char *rm_webm = join_str(rm_webm_arr, 4);
-                if(system(rm_webm) == 0)
-                    JANUS_LOG(LOG_VERB, "removed .webm\n");
-                free((char*)rm_webm);
-
-                const char *rm_opus_arr[] = {"sudo rm ", recordings_path, "/", dest_file_name_audio};
-                const char *rm_opus = join_str(rm_opus_arr, 4);
-                if(system(rm_opus) == 0)
-                    JANUS_LOG(LOG_VERB, "removed .opus\n");
-                free((char*)rm_opus);
-            }
+            if(system(commands_str) == 0)
+                JANUS_LOG(LOG_VERB, "Successfully recorded ...\n");
             else
-                JANUS_LOG(LOG_ERR, "Error in converting %s\n", source_file_name_video);
+                JANUS_LOG(LOG_VERB, "Error while recording ...\n");
 
             // releasing memory
             free((char*)source_file_name_video);
@@ -2071,6 +2055,8 @@ playdone:
             free((char*)dest_file_name_audio);
             free((char*)command_video_str);
             free((char*)command_audio_str);
+            free((char*)merge_command_str);
+            free((char*)commands_str);
 
 /****************** @Treeleaf *************************************************************/
 

@@ -279,7 +279,16 @@
 #include "../rtp.h"
 #include "../rtcp.h"
 #include "../utils.h"
+#include <curl/curl.h> //@Treeleaf
+#include <string.h> //@Treeleaf
 
+/** @Treeleaf
+ * Structure to hold the response after http call is resolved from anydone to save recording.
+ */
+typedef struct anydone_http_response {
+    char *memory;
+    size_t size;
+} anydone_http_response;
 
 /* Plugin information */
 #define JANUS_RECORDPLAY_VERSION			4
@@ -315,7 +324,8 @@ json_t *janus_recordplay_query_session(janus_plugin_session *handle);
 /****************** @Treeleaf *************************************************************/
 
 const char *join_str(const char *str[], size_t size);
-const char *format_file(gint64 id, const char *type, const char *format);
+gboolean upload_file(const char *url, const char *file_name_audio, const char *file_name_video, gint64 session_id, const char *room_id);
+static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
 
 /****************** @Treeleaf *************************************************************/
 
@@ -506,6 +516,8 @@ static void janus_recordplay_recording_free(const janus_refcount *recording_ref)
 
 
 static char *recordings_path = NULL;
+static char *anydone_upload_url = NULL;
+static char *anydone_auth_token = NULL;
 void janus_recordplay_update_recordings_list(void);
 static void *janus_recordplay_playout_thread(void *data);
 
@@ -802,6 +814,17 @@ int janus_recordplay_init(janus_callbacks *callback, const char *config_path) {
 		janus_config_item *path = janus_config_get(config, config_general, janus_config_type_item, "path");
 		if(path && path->value)
 			recordings_path = g_strdup(path->value);
+
+		//@Treeleaf
+		janus_config_item *anydone_url = janus_config_get(config, config_general, janus_config_type_item, "anydone_upload_url");
+        if(anydone_url && anydone_url->value)
+            anydone_upload_url = g_strdup(anydone_url->value);
+
+        janus_config_item *anydone_auth_token_obj = janus_config_get(config, config_general, janus_config_type_item, "anydone_auth_token");
+        if(anydone_auth_token_obj && anydone_auth_token_obj->value)
+            anydone_auth_token = g_strdup(anydone_auth_token_obj->value);
+        //@Treeleaf
+
 		janus_config_item *events = janus_config_get(config, config_general, janus_config_type_item, "events");
 		if(events != NULL && events->value != NULL)
 			notify_events = janus_is_true(events->value);
@@ -1470,6 +1493,26 @@ static void janus_recordplay_hangup_media_internal(janus_plugin_session *handle)
 					JANUS_LOG(LOG_WARN, "Could not generate offer for recording %"SCNu64"...\n", session->recording->id);
 				}
 			}
+
+			/**
+			 * @Treeleaf
+			 */
+            gboolean anydone_status = FALSE;
+            const char *audio_arr[] = {session->recording->arc_file, ".mjr"};
+            const char *video_arr[] = {session->recording->vrc_file, ".mjr"};
+            const char *source_file_name_audio = join_str(audio_arr, 2);
+            const char *source_file_name_video = join_str(video_arr, 2);
+
+            if(anydone_upload_url)
+                anydone_status = upload_file(anydone_upload_url, source_file_name_audio, source_file_name_video, session->recording->id, session->recording->name);
+
+            free((char*)source_file_name_video);
+            free((char*)source_file_name_audio);
+
+            if(anydone_status)
+                JANUS_LOG(LOG_INFO, "Successfully uploaded audio/video recording to anydone...\n");
+            else
+                JANUS_LOG(LOG_WARN, "Couldn't upload audio/video recording to anydone...\n");
 		} else {
 			JANUS_LOG(LOG_WARN, "Got a stop but missing recorder/recording! .nfo file may not have been generated...\n");
 		}
@@ -2012,53 +2055,7 @@ playdone:
 						json_object_set_new(info, "id", json_integer(session->recording->id));
 					gateway->notify_event(&janus_recordplay_plugin, session->handle, info);
 				}
-			}
-
-/****************** @Treeleaf *************************************************************/
-/***** Converts the .mjr into .webm and audio to .opus format ********************************/
-
-            const char *source_file_name_video = format_file(session->recording->id, "video", "mjr");
-            const char *dest_file_name_video = format_file(session->recording->id, "video", "webm");
-
-            const char *source_file_name_audio = format_file(session->recording->id, "audio", "mjr");
-            const char *dest_file_name_audio = format_file(session->recording->id, "audio", "opus");
-
-            const char *command_video[] = {"janus-pp-rec ", recordings_path, "/", source_file_name_video, " ", recordings_path, "/",
-                                           dest_file_name_video};
-            const char *command_video_str = join_str(command_video, 8);
-
-            const char *command_audio[] = {"janus-pp-rec ", recordings_path, "/", source_file_name_audio, " ", recordings_path, "/",
-                                           dest_file_name_audio};
-            const char *command_audio_str = join_str(command_audio, 8);
-
-            struct stat st = {0};
-            char path[128] = "";
-            strcpy(path, recordings_path);
-            strcat(path, "/videos");
-            if(stat(path, &st) == -1)
-                mkdir(path, 0770);
-
-            const char *merge_command[] = {"sudo ffmpeg -i ", recordings_path, "/", dest_file_name_audio, " -i ", recordings_path, "/", dest_file_name_video, " -c:v copy -c:a opus -strict experimental ", recordings_path, "/videos/", dest_file_name_video};
-            const char *merge_command_str = join_str(merge_command, 12);
-            const char *commands[] = {command_audio_str, "&&", command_video_str, "&&", merge_command_str};
-            const char *commands_str = join_str(commands, 5);
-
-            if(system(commands_str) == 0)
-                JANUS_LOG(LOG_VERB, "Successfully recorded ...\n");
-            else
-                JANUS_LOG(LOG_VERB, "Error while recording ...\n");
-
-            // releasing memory
-            free((char*)source_file_name_video);
-            free((char*)dest_file_name_video);
-            free((char*)source_file_name_audio);
-            free((char*)dest_file_name_audio);
-            free((char*)command_video_str);
-            free((char*)command_audio_str);
-            free((char*)merge_command_str);
-            free((char*)commands_str);
-
-/****************** @Treeleaf *************************************************************/
+            }
 
 			/* Tell the core to tear down the PeerConnection, hangup_media will do the rest */
 			gateway->close_pc(session->handle);
@@ -3005,17 +3002,120 @@ const char *join_str(const char *str[], size_t size) {
     return source_file_name;
 }
 
+
 /**
  * @Treeleaf
- * @param id
- * @param type ( it could be "video" or "audio" )
- * @param format ( it could be format for audio and video like opus and webm )
+ * @param contents
+ * @param size
+ * @param nmemb
+ * @param userp
  * @return
  */
-const char *format_file(gint64 id, const char *type, const char *format) {
-    char id_str[64];
-    snprintf(id_str, sizeof id_str, "%ld", id);
+static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp){
+    size_t real_size = size * nmemb;
+    anydone_http_response *mem = (anydone_http_response *)userp;
+    mem->memory = realloc(mem->memory, mem->size + real_size + 1);
 
-    const char *str[] = {"rec-", id_str, "-", type, ".", format};
-    return join_str(str, 6);
+    if(mem->memory == NULL) {
+        JANUS_LOG(LOG_ERR, "Not enough memory for to upload file.\n");
+        return 0;
+    }
+
+    memcpy(&(mem->memory[mem->size]), contents, real_size);
+    mem->size += real_size;
+    mem->memory[mem->size] = 0;
+
+    return real_size;
+}
+
+/**
+ * @Treeleaf
+ * Reference:- https://curl.se/libcurl/c/postit2.html
+ * @param url
+ * @return
+ */
+gboolean upload_file(const char *url, const char *file_name_audio, const char *file_name_video, gint64 session_id, const char *room_id){
+    CURL *curl;
+    CURLcode res;
+
+    curl_mime *form = NULL;
+    curl_mimepart *field = NULL;
+
+    anydone_http_response *response_data = malloc(sizeof(anydone_http_response));
+    response_data->memory = malloc(1);  /* will be grown as needed by the realloc above */
+    response_data->size = 0;    /* no data at this point */
+
+    curl = curl_easy_init();
+
+    if(!curl)
+        return CURLE_FAILED_INIT;
+
+    /* Create the form */
+    form = curl_mime_init(curl);
+
+    char file_path_audio[128];
+    strcpy(file_path_audio, recordings_path);
+    strcat(file_path_audio, "/");
+    strcat(file_path_audio, file_name_audio);
+
+    /* Fill in the file upload field */
+    field = curl_mime_addpart(form);
+    curl_mime_name(field, "audio");
+    curl_mime_filedata(field, file_path_audio);
+
+    char file_path_video[128];
+    strcpy(file_path_video, recordings_path);
+    strcat(file_path_video, "/");
+    strcat(file_path_video, file_name_video);
+
+    /* Fill in the file upload field */
+    field = curl_mime_addpart(form);
+    curl_mime_name(field, "video");
+    curl_mime_filedata(field, file_path_video);
+
+    /* Fill the session id field */
+    field = curl_mime_addpart(form);
+    curl_mime_name(field, "sessionId");
+    char session_id_str[64];
+    g_snprintf(session_id_str, sizeof(session_id_str), "%"SCNu64, session_id);
+    curl_mime_data(field, session_id_str, CURL_ZERO_TERMINATED);
+
+    /* Fill the room id field */
+    field = curl_mime_addpart(form);
+    curl_mime_name(field, "roomId");
+    curl_mime_data(field, room_id, CURL_ZERO_TERMINATED);
+
+    /* Fill the token field */
+    field = curl_mime_addpart(form);
+    curl_mime_name(field, "token");
+    curl_mime_data(field, anydone_auth_token, CURL_ZERO_TERMINATED);
+
+    /* what URL that receives this POST */
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, anydone_http_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) response_data);
+
+    /* Perform the request, res will get the return code */
+    res = curl_easy_perform(curl);
+
+    /* always cleanup */
+    free(response_data->memory);
+    free(response_data);
+
+    curl_easy_cleanup(curl);
+
+    /* then cleanup the form */
+    curl_mime_free(form);
+
+    /* Check for errors */
+    if(res != CURLE_OK)
+        JANUS_LOG(LOG_ERR, "upload file to anydone failed: %s\n", curl_easy_strerror(res));
+
+    /* get http code and return TRUE for success */
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    return (http_code == 200)? TRUE: FALSE;
 }

@@ -324,7 +324,7 @@ json_t *janus_recordplay_query_session(janus_plugin_session *handle);
 /****************** @Treeleaf *************************************************************/
 
 const char *join_str(const char *str[], size_t size);
-gboolean upload_file(const char *url, const char *file_name_audio, const char *file_name_video, gint64 session_id, const char *room_id);
+gboolean upload_file(const char *url, const char *file_name_audio, const char *file_name_video, const char *session_id, const char *room_id);
 static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
 
 /****************** @Treeleaf *************************************************************/
@@ -1497,22 +1497,38 @@ static void janus_recordplay_hangup_media_internal(janus_plugin_session *handle)
 			/**
 			 * @Treeleaf
 			 */
-            gboolean anydone_status = FALSE;
-            const char *audio_arr[] = {session->recording->arc_file, ".mjr"};
-            const char *video_arr[] = {session->recording->vrc_file, ".mjr"};
-            const char *source_file_name_audio = join_str(audio_arr, 2);
-            const char *source_file_name_video = join_str(video_arr, 2);
+            gboolean record_upload_flag = FALSE;
+            const char *audio_file_name = "";
+            const char *video_file_name = "";
+            if(session->recording->arc_file){
+                const char *audio_arr[] = {session->recording->arc_file, ".mjr"};
+                audio_file_name = join_str(audio_arr, 2);
+            }
+            if(session->recording->vrc_file){
+                const char *video_arr[] = {session->recording->vrc_file, ".mjr"};
+                video_file_name = join_str(video_arr, 2);
+            }
 
-            if(anydone_upload_url)
-                anydone_status = upload_file(anydone_upload_url, source_file_name_audio, source_file_name_video, session->recording->id, session->recording->name);
+            const char *delimeter = ":";
+            char *session_rec_name_copy = strdup(session->recording->name);
+            const char *person_name = strsep(&session_rec_name_copy, delimeter);
+            const char *session_id = strsep(&session_rec_name_copy, delimeter);
+            const char *room_id = strsep(&session_rec_name_copy, delimeter);
 
-            free((char*)source_file_name_video);
-            free((char*)source_file_name_audio);
+            if(anydone_upload_url && session_id && room_id)
+                record_upload_flag = upload_file(anydone_upload_url, audio_file_name, video_file_name, session_id, room_id);
 
-            if(anydone_status)
-                JANUS_LOG(LOG_INFO, "Successfully uploaded audio/video recording to anydone...\n");
+            if(session->recording->vrc_file)
+                free((char*)video_file_name);
+            if(session->recording->arc_file)
+                free((char*)audio_file_name);
+            if(session_rec_name_copy)
+                free((char*)session_rec_name_copy);
+
+            if(record_upload_flag)
+                JANUS_LOG(LOG_INFO, "Successfully uploaded audio/video recording %s to anydone...\n", session->recording->name);
             else
-                JANUS_LOG(LOG_WARN, "Couldn't upload audio/video recording to anydone...\n");
+                JANUS_LOG(LOG_WARN, "Couldn't upload audio/video recording %s to anydone...\n", session->recording->name);
 		} else {
 			JANUS_LOG(LOG_WARN, "Got a stop but missing recorder/recording! .nfo file may not have been generated...\n");
 		}
@@ -3034,7 +3050,7 @@ static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, v
  * @param url
  * @return
  */
-gboolean upload_file(const char *url, const char *file_name_audio, const char *file_name_video, gint64 session_id, const char *room_id){
+gboolean upload_file(const char *url, const char *file_name_audio, const char *file_name_video, const char *session_id, const char *room_id){
     CURL *curl;
     CURLcode res;
 
@@ -3076,9 +3092,7 @@ gboolean upload_file(const char *url, const char *file_name_audio, const char *f
     /* Fill the session id field */
     field = curl_mime_addpart(form);
     curl_mime_name(field, "sessionId");
-    char session_id_str[64];
-    g_snprintf(session_id_str, sizeof(session_id_str), "%"SCNu64, session_id);
-    curl_mime_data(field, session_id_str, CURL_ZERO_TERMINATED);
+    curl_mime_data(field, session_id, CURL_ZERO_TERMINATED);
 
     /* Fill the room id field */
     field = curl_mime_addpart(form);

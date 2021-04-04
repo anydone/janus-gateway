@@ -1163,6 +1163,7 @@ room-<unique room ID>: {
 /** @Treeleaf
  * Structure to hold the response after http call is resolved from anydone to save recording.
  */
+ static size_t counter = 0;
 typedef struct anydone_http_response {
     char *memory;
     size_t size;
@@ -1199,15 +1200,6 @@ void janus_videoroom_slow_link(janus_plugin_session *handle, int uplink, int vid
 void janus_videoroom_hangup_media(janus_plugin_session *handle);
 void janus_videoroom_destroy_session(janus_plugin_session *handle, int *error);
 json_t *janus_videoroom_query_session(janus_plugin_session *handle);
-
-/****************************** @Treeleaf *************************************************************/
-
-const char *join_str(const char *str[], size_t size);
-gboolean upload_file(const char *url, const char *file_name_audio, const char *file_name_video, const char *session_id, const char *room_id);
-static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
-
-/***************************** @Treeleaf *************************************************************/
-
 
 /* Plugin setup */
 static janus_plugin janus_videoroom_plugin =
@@ -1725,6 +1717,16 @@ typedef struct janus_videoroom_rtp_relay_packet {
 /* Start / stop recording */
 static void janus_videoroom_recorder_create(janus_videoroom_publisher *participant, gboolean audio, gboolean video, gboolean data);
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant);
+
+/****************************** @Treeleaf *************************************************************/
+
+const char *join_str(const char *str[], size_t size);
+gboolean upload_file(const char *url, const char *file_name_audio, const char *file_name_video, const char *session_id, const char *room_id);
+static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
+static void anydone_upload_files(janus_videoroom_publisher *participant);
+
+/***************************** @Treeleaf *************************************************************/
+
 
 /* Freeing stuff */
 static void janus_videoroom_subscriber_destroy(janus_videoroom_subscriber *s) {
@@ -5675,31 +5677,7 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher *participa
 
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant) {
     //@Treeleaf
-    gboolean record_upload_flag = FALSE;
-    const char *audio_file_name = NULL;
-    const char *video_file_name = NULL;
-    if(participant->arc)
-        audio_file_name = participant->arc->filename;
-    if(participant->vrc)
-        video_file_name = participant->vrc->filename;
-
-    char session_id_str[32];
-    snprintf(session_id_str, 32, "%zu", participant->session->sdp_sessid);
-
-    if(anydone_upload_url && audio_file_name)
-        record_upload_flag = upload_file(anydone_upload_url, audio_file_name, video_file_name, session_id_str, participant->room_id_str);
-
-    if(audio_file_name)
-        free((char*)audio_file_name);
-    if(video_file_name)
-        free((char*)video_file_name);
-
-    if(record_upload_flag)
-        JANUS_LOG(LOG_INFO, "Successfully uploaded \naudio => %s\nvideo=>%s to anydone...\n", audio_file_name, video_file_name);
-    else
-        JANUS_LOG(LOG_WARN, "Couldn't upload \naudio => %s\nvideo=>%s to anydone...\n", audio_file_name, video_file_name);
-
-    //@Treeleaf
+    anydone_upload_files(participant);
 
     if(participant->arc) {
 		janus_recorder *rc = participant->arc;
@@ -5797,6 +5775,7 @@ static void janus_videoroom_hangup_media_internal(gpointer session_data) {
 		g_free(participant->recording_base);
 		participant->recording_base = NULL;
 		janus_videoroom_recorder_close(participant);
+
 		janus_mutex_unlock(&participant->rec_mutex);
 		/* Use subscribers_mutex to protect fields used in janus_videoroom_incoming_rtp */
 		janus_mutex_lock(&participant->subscribers_mutex);
@@ -8110,6 +8089,28 @@ static void *janus_videoroom_rtp_forwarder_rtcp_thread(void *data) {
 	/* When the loop ends, we're done */
 	JANUS_LOG(LOG_VERB, "Leaving RTCP thread for RTP forwarders...\n");
 	return NULL;
+}
+
+static void anydone_upload_files(janus_videoroom_publisher *participant){
+    //@Treeleaf
+    printf("..........Beginning..............\n");
+    printf("Thread => %zu\n", counter);
+
+    gboolean record_upload_flag = FALSE;
+    char session_id_str[32];
+    snprintf(session_id_str, 32, "%zu", participant->session->sdp_sessid);
+
+    if(anydone_upload_url && participant->arc && participant->vrc)
+        record_upload_flag = upload_file(anydone_upload_url, participant->arc->filename, participant->vrc->filename, session_id_str, participant->room_id_str);
+
+    if(record_upload_flag)
+        JANUS_LOG(LOG_INFO, "Successfully uploaded \naudio => %s\nvideo=>%s to anydone...\n", participant->arc->filename, participant->vrc->filename);
+    else
+        JANUS_LOG(LOG_WARN, "Couldn't upload media files to anydone...\n");
+
+    counter++;
+    printf("..........Ending..............\n");
+    //@Treeleaf
 }
 
 /** @Treeleaf

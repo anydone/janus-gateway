@@ -1719,7 +1719,6 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 
 /****************************** @Treeleaf *************************************************************/
 
-const char *join_str(const char *str[], size_t size);
 gboolean upload_file(const char *url, char *base_path, const char *file_name_audio, const char *file_name_video, const char *session_id, const char *room_id);
 static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
 static void anydone_upload_files(janus_videoroom_publisher *participant);
@@ -8108,28 +8107,6 @@ static void anydone_upload_files(janus_videoroom_publisher *participant){
         if(record_upload_flag)
             JANUS_LOG(LOG_INFO, "Successfully uploaded %s to anydone...\n", participant->arc->filename);
     }
-}
-
-/** @Treeleaf
- * returns new string by concatenating the str array.
- * @param str is array of character pointer
- * @param size is length of array.
- * @return
- */
-const char *join_str(const char *str[], size_t size) {
-    if (size < 1)
-        return NULL;
-
-    size_t buffer_size = 0;
-    for (size_t i = 0; i < size; i++)
-        buffer_size += strlen(str[i]);
-
-    char *source_file_name = (char *) malloc(sizeof(char) * (buffer_size + 1));
-    strcpy(source_file_name, str[0]);
-    for (size_t i = 1; i < size; i++)
-        strcat(source_file_name, str[i]);
-
-    return source_file_name;
 }
 
 

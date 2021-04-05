@@ -1163,7 +1163,6 @@ room-<unique room ID>: {
 /** @Treeleaf
  * Structure to hold the response after http call is resolved from anydone to save recording.
  */
- static size_t counter = 0;
 typedef struct anydone_http_response {
     char *memory;
     size_t size;
@@ -1721,7 +1720,7 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 /****************************** @Treeleaf *************************************************************/
 
 const char *join_str(const char *str[], size_t size);
-gboolean upload_file(const char *url, const char *file_name_audio, const char *file_name_video, const char *session_id, const char *room_id);
+gboolean upload_file(const char *url, char *base_path, const char *file_name_audio, const char *file_name_video, const char *session_id, const char *room_id);
 static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
 static void anydone_upload_files(janus_videoroom_publisher *participant);
 
@@ -8091,26 +8090,24 @@ static void *janus_videoroom_rtp_forwarder_rtcp_thread(void *data) {
 	return NULL;
 }
 
+/**
+ * @Treeleaf
+ * @param participant
+ */
 static void anydone_upload_files(janus_videoroom_publisher *participant){
-    //@Treeleaf
-    printf("..........Beginning..............\n");
-    printf("Thread => %zu\n", counter);
-
     gboolean record_upload_flag = FALSE;
     char session_id_str[32];
     snprintf(session_id_str, 32, "%zu", participant->session->sdp_sessid);
 
-    if(anydone_upload_url && participant->arc && participant->vrc)
-        record_upload_flag = upload_file(anydone_upload_url, participant->arc->filename, participant->vrc->filename, session_id_str, participant->room_id_str);
+    if(anydone_upload_url && participant->arc){
+        if(participant->vrc)
+            record_upload_flag = upload_file(anydone_upload_url, participant->room->rec_dir, participant->arc->filename, participant->vrc->filename, session_id_str, participant->room_id_str);
+        else
+            record_upload_flag = upload_file(anydone_upload_url, participant->room->rec_dir, participant->arc->filename, NULL, session_id_str, participant->room_id_str);
 
-    if(record_upload_flag)
-        JANUS_LOG(LOG_INFO, "Successfully uploaded \naudio => %s\nvideo=>%s to anydone...\n", participant->arc->filename, participant->vrc->filename);
-    else
-        JANUS_LOG(LOG_WARN, "Couldn't upload media files to anydone...\n");
-
-    counter++;
-    printf("..........Ending..............\n");
-    //@Treeleaf
+        if(record_upload_flag)
+            JANUS_LOG(LOG_INFO, "Successfully uploaded %s to anydone...\n", participant->arc->filename);
+    }
 }
 
 /** @Treeleaf
@@ -8167,13 +8164,12 @@ static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, v
  * @param url
  * @return
  */
-gboolean upload_file(const char *url, const char *file_name_audio, const char *file_name_video, const char *session_id, const char *room_id){
+gboolean upload_file(const char *url, char *base_path, const char *file_name_audio, const char *file_name_video, const char *session_id, const char *room_id){
     CURL *curl;
     CURLcode res;
 
     curl_mime *form = NULL;
     curl_mimepart *field = NULL;
-    const char *recordings_path = "/opt/janus/share/janus/recordings";
 
     anydone_http_response *response_data = malloc(sizeof(anydone_http_response));
     response_data->memory = malloc(1);  /* will be grown as needed by the realloc above */
@@ -8188,24 +8184,34 @@ gboolean upload_file(const char *url, const char *file_name_audio, const char *f
     form = curl_mime_init(curl);
 
     char file_path_audio[128];
-    strcpy(file_path_audio, recordings_path);
-    strcat(file_path_audio, "/");
-    strcat(file_path_audio, file_name_audio);
-
+    if(base_path){
+        strcpy(file_path_audio, base_path);
+        strcat(file_path_audio, "/");
+        strcat(file_path_audio, file_name_audio);
+    }
+    else{
+        strcpy(file_path_audio, file_name_audio);
+    }
     /* Fill in the file upload field */
     field = curl_mime_addpart(form);
     curl_mime_name(field, "audio");
     curl_mime_filedata(field, file_path_audio);
 
-    char file_path_video[128];
-    strcpy(file_path_video, recordings_path);
-    strcat(file_path_video, "/");
-    strcat(file_path_video, file_name_video);
-
-    /* Fill in the file upload field */
-    field = curl_mime_addpart(form);
-    curl_mime_name(field, "video");
-    curl_mime_filedata(field, file_path_video);
+    if(file_name_video){
+        char file_path_video[128];
+        if(base_path){
+            strcpy(file_path_video, base_path);
+            strcat(file_path_video, "/");
+            strcat(file_path_video, file_name_video);
+        }
+        else{
+            strcpy(file_path_video, file_name_video);
+        }
+        /* Fill in the file upload field */
+        field = curl_mime_addpart(form);
+        curl_mime_name(field, "video");
+        curl_mime_filedata(field, file_path_video);
+    }
 
     /* Fill the session id field */
     field = curl_mime_addpart(form);
@@ -8244,7 +8250,7 @@ gboolean upload_file(const char *url, const char *file_name_audio, const char *f
 
     /* Check for errors */
     if(res != CURLE_OK)
-        JANUS_LOG(LOG_ERR, "upload file to anydone failed: %s\n", curl_easy_strerror(res));
+        JANUS_LOG(LOG_ERR, "Upload file to anydone failed: %s\n", curl_easy_strerror(res));
 
     /* get http code and return TRUE for success */
     long http_code = 0;

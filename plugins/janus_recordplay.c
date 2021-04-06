@@ -268,7 +268,6 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <jansson.h>
-#include <sys/stat.h>
 
 #include "../debug.h"
 #include "../apierror.h"
@@ -279,6 +278,7 @@
 #include "../rtp.h"
 #include "../rtcp.h"
 #include "../utils.h"
+
 
 /* Plugin information */
 #define JANUS_RECORDPLAY_VERSION			4
@@ -495,6 +495,7 @@ static void janus_recordplay_recording_free(const janus_refcount *recording_ref)
 	g_free(recording->offer);
 	g_free(recording);
 }
+
 
 static char *recordings_path = NULL;
 void janus_recordplay_update_recordings_list(void);
@@ -2004,8 +2005,7 @@ playdone:
 						json_object_set_new(info, "id", json_integer(session->recording->id));
 					gateway->notify_event(&janus_recordplay_plugin, session->handle, info);
 				}
-            }
-
+			}
 			/* Tell the core to tear down the PeerConnection, hangup_media will do the rest */
 			gateway->close_pc(session->handle);
 		} else {

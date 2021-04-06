@@ -5678,7 +5678,7 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
     /* @Treeleaf  */
     /* Check if audio or video recording */
     if(participant->arc || participant->vrc){
-        anydone_upload_files(participant);
+	anydone_upload_files(participant);
     }
     
     if(participant->arc) {
@@ -5777,7 +5777,6 @@ static void janus_videoroom_hangup_media_internal(gpointer session_data) {
 		g_free(participant->recording_base);
 		participant->recording_base = NULL;
 		janus_videoroom_recorder_close(participant);
-
 		janus_mutex_unlock(&participant->rec_mutex);
 		/* Use subscribers_mutex to protect fields used in janus_videoroom_incoming_rtp */
 		janus_mutex_lock(&participant->subscribers_mutex);

@@ -1719,7 +1719,8 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 
 /****************************** @Treeleaf *************************************************************/
 
-gboolean upload_file(const char *url, char *base_path, const char *file_name_audio, const char *file_name_video, const char *session_id, const char *room_id);
+//gboolean upload_file(const char *url, char *base_path, const char *file_name_audio, const char *file_name_video, const char *session_id, const char *room_id);
+gboolean upload_file(const char *url, janus_videoroom_publisher *participant);
 static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
 static void anydone_upload_files(janus_videoroom_publisher *participant);
 
@@ -5674,9 +5675,12 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher *participa
 }
 
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant) {
-    //@Treeleaf
-    anydone_upload_files(participant);
-
+    /* @Treeleaf  */
+    /* Check if audio or video recording */
+    if(participant->arc || participant->vrc){
+        anydone_upload_files(participant);
+    }
+    
     if(participant->arc) {
 		janus_recorder *rc = participant->arc;
 		participant->arc = NULL;
@@ -8094,21 +8098,11 @@ static void *janus_videoroom_rtp_forwarder_rtcp_thread(void *data) {
  * @param participant
  */
 static void anydone_upload_files(janus_videoroom_publisher *participant){
-    gboolean record_upload_flag = FALSE;
-    char session_id_str[32];
-    snprintf(session_id_str, 32, "%zu", participant->session->sdp_sessid);
-
-    if(anydone_upload_url && participant->arc){
-        if(participant->vrc)
-            record_upload_flag = upload_file(anydone_upload_url, participant->room->rec_dir, participant->arc->filename, participant->vrc->filename, session_id_str, participant->room_id_str);
-        else
-            record_upload_flag = upload_file(anydone_upload_url, participant->room->rec_dir, participant->arc->filename, NULL, session_id_str, participant->room_id_str);
-
-        if(record_upload_flag)
-            JANUS_LOG(LOG_INFO, "Successfully uploaded %s to anydone...\n", participant->arc->filename);
-    }
+    gboolean upload_flag = FALSE;
+    upload_flag = upload_file(anydone_upload_url, participant);
+    if(upload_flag)
+        JANUS_LOG(LOG_INFO, "Successfully uploaded %s to anydone...\n", participant->arc->filename);
 }
-
 
 /**
  * @Treeleaf
@@ -8141,7 +8135,12 @@ static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, v
  * @param url
  * @return
  */
-gboolean upload_file(const char *url, char *base_path, const char *file_name_audio, const char *file_name_video, const char *session_id, const char *room_id){
+gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
+    if(participant == NULL || url == NULL){
+        JANUS_LOG(LOG_ERR, "Either participant or url missing for recording\n");
+        return FALSE;
+    }
+
     CURL *curl;
     CURLcode res;
 
@@ -8160,29 +8159,34 @@ gboolean upload_file(const char *url, char *base_path, const char *file_name_aud
     /* Create the form */
     form = curl_mime_init(curl);
 
-    char file_path_audio[128];
-    if(base_path){
-        strcpy(file_path_audio, base_path);
-        strcat(file_path_audio, "/");
-        strcat(file_path_audio, file_name_audio);
-    }
-    else{
-        strcpy(file_path_audio, file_name_audio);
-    }
-    /* Fill in the file upload field */
-    field = curl_mime_addpart(form);
-    curl_mime_name(field, "audio");
-    curl_mime_filedata(field, file_path_audio);
-
-    if(file_name_video){
-        char file_path_video[128];
-        if(base_path){
-            strcpy(file_path_video, base_path);
-            strcat(file_path_video, "/");
-            strcat(file_path_video, file_name_video);
+    /* check for audio file present */
+    if(participant->arc){
+        char file_path_audio[128];
+        /* check base path for recording */
+        if(participant->room->rec_dir){
+            strcpy(file_path_audio, participant->room->rec_dir);
+            strcat(file_path_audio, "/");
+            strcat(file_path_audio, participant->arc->filename);
         }
         else{
-            strcpy(file_path_video, file_name_video);
+            strcpy(file_path_audio, participant->arc->filename);
+        }
+        /* Fill in the file upload field */
+        field = curl_mime_addpart(form);
+        curl_mime_name(field, "audio");
+        curl_mime_filedata(field, file_path_audio);
+    }
+
+    /* check for video file present */
+    if(participant->vrc){
+        char file_path_video[128];
+        if(participant->room->rec_dir){
+            strcpy(file_path_video, participant->room->rec_dir);
+            strcat(file_path_video, "/");
+            strcat(file_path_video, participant->vrc->filename);
+        }
+        else{
+            strcpy(file_path_video, participant->vrc->filename);
         }
         /* Fill in the file upload field */
         field = curl_mime_addpart(form);
@@ -8191,14 +8195,16 @@ gboolean upload_file(const char *url, char *base_path, const char *file_name_aud
     }
 
     /* Fill the session id field */
+    char session_id_str[32];
+    snprintf(session_id_str, 32, "%zu", participant->session->sdp_sessid);
     field = curl_mime_addpart(form);
     curl_mime_name(field, "sessionId");
-    curl_mime_data(field, session_id, CURL_ZERO_TERMINATED);
+    curl_mime_data(field, session_id_str, CURL_ZERO_TERMINATED);
 
     /* Fill the room id field */
     field = curl_mime_addpart(form);
     curl_mime_name(field, "roomId");
-    curl_mime_data(field, room_id, CURL_ZERO_TERMINATED);
+    curl_mime_data(field, participant->room_id_str, CURL_ZERO_TERMINATED);
 
     /* Fill the token field */
     field = curl_mime_addpart(form);

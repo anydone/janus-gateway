@@ -52,7 +52,7 @@ var janus = null;
 var sfutest = null;
 var opaqueId = "videoroomtest-"+Janus.randomString(12);
 
-var myroom = 1234;	// Demo room
+var myroom = null;	// Demo room
 if(getQueryStringValue("room") !== "")
 	myroom = parseInt(getQueryStringValue("room"));
 var myusername = null;
@@ -85,6 +85,7 @@ $(document).ready(function() {
 			janus = new Janus(
 				{
 					server: server,
+					apisecret: "",
 					success: function() {
 						// Attach to VideoRoom plugin
 						janus.attach(
@@ -92,20 +93,48 @@ $(document).ready(function() {
 								plugin: "janus.plugin.videoroom",
 								opaqueId: opaqueId,
 								success: function(pluginHandle) {
-									$('#details').remove();
-									sfutest = pluginHandle;
-									Janus.log("Plugin attached! (" + sfutest.getPlugin() + ", id=" + sfutest.getId() + ")");
-									Janus.log("  -- This is a publisher/manager");
-									// Prepare the username registration
-									$('#videojoin').removeClass('hide').show();
-									$('#registernow').removeClass('hide').show();
-									$('#register').click(registerUsername);
-									$('#username').focus();
-									$('#start').removeAttr('disabled').html("Stop")
-										.click(function() {
-											$(this).attr('disabled', true);
-											janus.destroy();
-										});
+									const url = `http://localhost:8088/janus/${janus.getSessionId()}/${pluginHandle.id}`;
+									const data = {
+										"janus":"message",
+										"transaction": "xfSG0ZXlWGVt",
+										"body":{
+											"request" : "create",
+											"record": true,
+											"rec_dir":"/opt/janus/share/janus/recordings"
+										},
+										"apisecret":"ZjNjY2JiODhiZjU1NDA0NDk3ZGViMGZlYjQwMDY0OGUuNWUyMGE0YmU5MjgzNDRmMDkwZWE1ZGYzMzFjNDExMGI=.7a086d1b1a82ef0e708a1970c1d93fa0eead676bf14ed2d235a76f20ebdb3c213f1ee20bf69926dc9df8a571973fb1afa1193bd19d6d028e11651b09ef53c114"
+									}
+									fetch(url,{
+										method: "POST",
+										headers: {
+											"Content-Type": "application/json"
+										},
+										body: JSON.stringify(data)
+									}).then(data => data.json())
+										.then(data => {
+											myroom = localStorage.getItem("room_id");
+											if(!myroom){
+												myroom = data.plugindata.data.room;
+												localStorage.setItem("room_id", myroom);
+											}
+											else{
+												myroom = parseInt(myroom);
+											}
+											$('#details').remove();
+											sfutest = pluginHandle;
+											Janus.log("Plugin attached! (" + sfutest.getPlugin() + ", id=" + sfutest.getId() + ")");
+											Janus.log("  -- This is a publisher/manager");
+											// Prepare the username registration
+											$('#videojoin').removeClass('hide').show();
+											$('#registernow').removeClass('hide').show();
+											$('#register').click(registerUsername);
+											$('#username').focus();
+											$('#start').removeAttr('disabled').html("Stop")
+												.click(function() {
+													$(this).attr('disabled', true);
+													janus.destroy();
+												});
+										})
 								},
 								error: function(error) {
 									Janus.error("  -- Error attaching plugin...", error);
@@ -410,7 +439,7 @@ function publishOwnFeed(useAudio) {
 	sfutest.createOffer(
 		{
 			// Add data:true here if you want to publish datachannels as well
-			media: { audioRecv: false, videoRecv: false, audioSend: useAudio, videoSend: true },	// Publishers are sendonly
+			media: { audioRecv: false, videoRecv: false, audioSend: useAudio, videoSend: true},	// Publishers are sendonly
 			// If you want to test simulcasting (Chrome and Firefox only), then
 			// pass a ?simulcast=true when opening this demo page: it will turn
 			// the following 'simulcast' property to pass to janus.js to true
@@ -418,7 +447,13 @@ function publishOwnFeed(useAudio) {
 			simulcast2: doSimulcast2,
 			success: function(jsep) {
 				Janus.debug("Got publisher SDP!", jsep);
-				var publish = { request: "configure", audio: useAudio, video: true };
+				var publish = {
+					request: "configure",
+					audio: useAudio,
+					video: true,
+					record: true,
+					rec_dir: "/opt/janus/share/janus/recordings"
+				};
 				// You can force a specific codec to use when publishing by using the
 				// audiocodec and videocodec properties, for instance:
 				// 		publish["audiocodec"] = "opus"

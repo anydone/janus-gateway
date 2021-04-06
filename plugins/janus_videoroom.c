@@ -1157,12 +1157,13 @@ room-<unique room ID>: {
 #include "../ip-utils.h"
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <curl/curl.h> //@Treeleaf
-#include <string.h> //@Treeleaf
 
-/** @Treeleaf
- * Structure to hold the response after http call is resolved from anydone to save recording.
- */
+/* @Treeleaf */
+#include <curl/curl.h>
+#include <string.h>
+
+/* @Treeleaf */
+/* Structure to hold the response after http call is resolved */
 typedef struct anydone_http_response {
     char *memory;
     size_t size;
@@ -1436,9 +1437,10 @@ static janus_config *config = NULL;
 static const char *config_folder = NULL;
 static janus_mutex config_mutex = JANUS_MUTEX_INITIALIZER;
 
-//@Treeleaf
+/* @Treeleaf */
 static char *anydone_upload_url = NULL;
 static char *anydone_auth_token = NULL;
+/* @Treeleaf */
 
 /* Useful stuff */
 static volatile gint initialized = 0, stopping = 0;
@@ -1717,14 +1719,11 @@ typedef struct janus_videoroom_rtp_relay_packet {
 static void janus_videoroom_recorder_create(janus_videoroom_publisher *participant, gboolean audio, gboolean video, gboolean data);
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant);
 
-/****************************** @Treeleaf *************************************************************/
-
-//gboolean upload_file(const char *url, char *base_path, const char *file_name_audio, const char *file_name_video, const char *session_id, const char *room_id);
+/* @Treeleaf */
 gboolean upload_file(const char *url, janus_videoroom_publisher *participant);
 static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
 static void anydone_upload_files(janus_videoroom_publisher *participant);
-
-/***************************** @Treeleaf *************************************************************/
+/* @Treeleaf */
 
 
 /* Freeing stuff */
@@ -2198,7 +2197,7 @@ int janus_videoroom_init(janus_callbacks *callback, const char *config_path) {
 			JANUS_LOG(LOG_INFO, "VideoRoom will use alphanumeric IDs, not numeric\n");
 		}
 
-		//@Treeleaf
+		/* @Treeleaf */
 		janus_config_item *anydone_upload_url_obj = janus_config_get(config, config_general, janus_config_type_item, "anydone_upload_url");
 		if(anydone_upload_url_obj && anydone_upload_url_obj->value)
             anydone_upload_url = g_strdup(anydone_upload_url_obj->value);
@@ -2206,7 +2205,7 @@ int janus_videoroom_init(janus_callbacks *callback, const char *config_path) {
         janus_config_item *anydone_auth_token_obj = janus_config_get(config, config_general, janus_config_type_item, "anydone_auth_token");
         if(anydone_auth_token_obj && anydone_auth_token_obj->value)
             anydone_auth_token = g_strdup(anydone_auth_token_obj->value);
-        //@Treeleaf
+        /* @Treeleaf */
 	}
 	rooms = g_hash_table_new_full(string_ids ? g_str_hash : g_int64_hash, string_ids ? g_str_equal : g_int64_equal,
 		(GDestroyNotify)g_free, (GDestroyNotify)janus_videoroom_room_destroy);
@@ -5675,10 +5674,10 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher *participa
 }
 
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant) {
-    /* @Treeleaf  */
+    /* @Treeleaf */
     /* Check if audio or video recording */
     if(participant->arc || participant->vrc){
-	anydone_upload_files(participant);
+	    anydone_upload_files(participant);
     }
     
     if(participant->arc) {
@@ -8135,7 +8134,7 @@ static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, v
  * @return
  */
 gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
-    if(participant == NULL || url == NULL){
+    if(url == NULL || participant == NULL){
         JANUS_LOG(LOG_ERR, "Either participant or url missing for recording\n");
         return FALSE;
     }
@@ -8231,8 +8230,10 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
     curl_mime_free(form);
 
     /* Check for errors */
-    if(res != CURLE_OK)
+    if(res != CURLE_OK){
         JANUS_LOG(LOG_ERR, "Upload file to anydone failed: %s\n", curl_easy_strerror(res));
+        return FALSE;
+    }
 
     /* get http code and return TRUE for success */
     long http_code = 0;

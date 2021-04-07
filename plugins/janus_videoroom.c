@@ -1723,6 +1723,7 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 gboolean upload_file(const char *url, janus_videoroom_publisher *participant);
 static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
 static void anydone_upload_files(janus_videoroom_publisher *participant);
+static char *substring(char *str, char delimeter);
 /* @Treeleaf */
 
 
@@ -8144,6 +8145,7 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
 
     curl_mime *form = NULL;
     curl_mimepart *field = NULL;
+    char *session_id = NULL;
 
     anydone_http_response *response_data = malloc(sizeof(anydone_http_response));
     response_data->memory = malloc(1);  /* will be grown as needed by the realloc above */
@@ -8169,6 +8171,10 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
         else{
             strcpy(file_path_audio, participant->arc->filename);
         }
+
+        /* get session id from file name */
+        session_id = substring(participant->arc->filename, '-');
+
         /* Fill in the file upload field */
         field = curl_mime_addpart(form);
         curl_mime_name(field, "audio");
@@ -8193,21 +8199,25 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
     }
 
     /* Fill the session id field */
-    char session_id_str[32];
-    snprintf(session_id_str, 32, "%zu", participant->session->sdp_sessid);
-    field = curl_mime_addpart(form);
-    curl_mime_name(field, "sessionId");
-    curl_mime_data(field, session_id_str, CURL_ZERO_TERMINATED);
+    if(session_id){
+        field = curl_mime_addpart(form);
+        curl_mime_name(field, "sessionId");
+        curl_mime_data(field, session_id, CURL_ZERO_TERMINATED);
+    }
 
     /* Fill the room id field */
-    field = curl_mime_addpart(form);
-    curl_mime_name(field, "roomId");
-    curl_mime_data(field, participant->room_id_str, CURL_ZERO_TERMINATED);
+    if(participant->room_id_str){
+        field = curl_mime_addpart(form);
+        curl_mime_name(field, "roomId");
+        curl_mime_data(field, participant->room_id_str, CURL_ZERO_TERMINATED);
+    }
 
     /* Fill the token field */
-    field = curl_mime_addpart(form);
-    curl_mime_name(field, "token");
-    curl_mime_data(field, anydone_auth_token, CURL_ZERO_TERMINATED);
+    if(anydone_auth_token){
+        field = curl_mime_addpart(form);
+        curl_mime_name(field, "token");
+        curl_mime_data(field, anydone_auth_token, CURL_ZERO_TERMINATED);
+    }
 
     /* what URL that receives this POST */
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
@@ -8223,6 +8233,7 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
     /* always cleanup */
     free(response_data->memory);
     free(response_data);
+    free(session_id);
 
     curl_easy_cleanup(curl);
 
@@ -8239,4 +8250,29 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     return (http_code == 200)? TRUE: FALSE;
+}
+
+/**
+ * @Treeleaf
+ * returns a new string by splitting str until it finds delimeter character.
+ */
+char *substring(char *str, char delimeter){
+    char *temp = str;
+    while((*temp != '\0') && (*temp != delimeter) ){
+        printf("%c", *temp);
+        temp++;
+    }
+    size_t len = temp-str;
+    if(!len){
+        return NULL;
+    }
+    char *temp_str = (char*)(malloc((len+1)*sizeof(char)));
+    size_t i = 0;
+    while(i<len){
+        temp_str[i] = str[i];
+        i++;
+    }
+    temp_str[i] = '\0';
+
+    return temp_str;
 }

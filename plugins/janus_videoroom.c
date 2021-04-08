@@ -8100,7 +8100,9 @@ static void anydone_upload_files(janus_videoroom_publisher *participant){
     gboolean upload_flag = FALSE;
     upload_flag = upload_file(anydone_upload_url, participant);
     if(upload_flag)
-        JANUS_LOG(LOG_INFO, "Successfully uploaded %s to anydone...\n", participant->arc->filename);
+        JANUS_LOG(LOG_INFO, "\nSuccessfully uploaded %s to anydone...\n", participant->arc->filename);
+    else
+        JANUS_LOG(LOG_INFO, "\nFail to upload media file to anydone...\n");
 }
 
 /**

@@ -98,11 +98,12 @@ $(document).ready(function() {
 										"janus":"message",
 										"transaction": "xfSG0ZXlWGVt",
 										"body":{
+											"publishers": 10,
 											"request" : "create",
 											"record": true,
 											"rec_dir":"/opt/janus/share/janus/recordings"
 										},
-										"apisecret":"ZjNjY2JiODhiZjU1NDA0NDk3ZGViMGZlYjQwMDY0OGUuNWUyMGE0YmU5MjgzNDRmMDkwZWE1ZGYzMzFjNDExMGI=.7a086d1b1a82ef0e708a1970c1d93fa0eead676bf14ed2d235a76f20ebdb3c213f1ee20bf69926dc9df8a571973fb1afa1193bd19d6d028e11651b09ef53c114"
+										"apisecret":""
 									}
 									fetch(url,{
 										method: "POST",
@@ -450,9 +451,10 @@ function publishOwnFeed(useAudio) {
 				var publish = {
 					request: "configure",
 					audio: useAudio,
-					video: true,
-					record: true,
-					rec_dir: "/opt/janus/share/janus/recordings"
+					video: false,
+					record: false,
+					rec_dir: "/opt/janus/share/janus/recordings",
+					filename: janus.getSessionId().toString()
 				};
 				// You can force a specific codec to use when publishing by using the
 				// audiocodec and videocodec properties, for instance:

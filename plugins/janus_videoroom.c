@@ -1440,6 +1440,7 @@ static janus_mutex config_mutex = JANUS_MUTEX_INITIALIZER;
 /* @Treeleaf */
 static char *anydone_upload_url = NULL;
 static char *anydone_auth_token = NULL;
+static char *recording_path = NULL;
 /* @Treeleaf */
 
 /* Useful stuff */
@@ -2206,6 +2207,10 @@ int janus_videoroom_init(janus_callbacks *callback, const char *config_path) {
         janus_config_item *anydone_auth_token_obj = janus_config_get(config, config_general, janus_config_type_item, "anydone_auth_token");
         if(anydone_auth_token_obj && anydone_auth_token_obj->value)
             anydone_auth_token = g_strdup(anydone_auth_token_obj->value);
+
+        janus_config_item *recording_path_obj = janus_config_get(config, config_general, janus_config_type_item, "rec_dir");
+        if(recording_path_obj && recording_path_obj->value)
+            recording_path = g_strdup(recording_path_obj->value);
         /* @Treeleaf */
 	}
 	rooms = g_hash_table_new_full(string_ids ? g_str_hash : g_int64_hash, string_ids ? g_str_equal : g_int64_equal,
@@ -2435,6 +2440,9 @@ int janus_videoroom_init(janus_callbacks *callback, const char *config_path) {
 			}
 			if(rec_dir && rec_dir->value) {
 				videoroom->rec_dir = g_strdup(rec_dir->value);
+			}
+			else{
+			    videoroom->rec_dir = recording_path;
 			}
 			if(lock_record && lock_record->value) {
 				videoroom->lock_record = janus_is_true(lock_record->value);
@@ -3287,6 +3295,9 @@ static json_t *janus_videoroom_process_synchronous_request(janus_videoroom_sessi
 		}
 		if(rec_dir) {
 			videoroom->rec_dir = g_strdup(json_string_value(rec_dir));
+		}
+		else{
+		    videoroom->rec_dir = recording_path;
 		}
 		if(lock_record) {
 			videoroom->lock_record = json_is_true(lock_record);

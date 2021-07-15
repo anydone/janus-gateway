@@ -8243,6 +8243,9 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
     /* Perform the request, res will get the return code */
     res = curl_easy_perform(curl);
 
+    if(response_data->memory)
+        JANUS_LOG(LOG_INFO, "\nUpload .mjr file response %s\n", response_data->memory);
+
     /* always cleanup */
     free(response_data->memory);
     free(response_data);
@@ -8255,7 +8258,7 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
 
     /* Check for errors */
     if(res != CURLE_OK){
-        JANUS_LOG(LOG_ERR, "Upload file to anydone failed: %s\n", curl_easy_strerror(res));
+        JANUS_LOG(LOG_ERR, "\nUpload file to anydone failed: %s\n", curl_easy_strerror(res));
         return FALSE;
     }
 

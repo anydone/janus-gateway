@@ -8213,6 +8213,7 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
 
     /* Fill the session id field */
     if(session_id){
+        JANUS_LOG(LOG_INFO, "\nSession id => %s\n", session_id);
         field = curl_mime_addpart(form);
         curl_mime_name(field, "sessionId");
         curl_mime_data(field, session_id, CURL_ZERO_TERMINATED);
@@ -8220,6 +8221,7 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
 
     /* Fill the room id field */
     if(participant->room_id_str){
+        JANUS_LOG(LOG_INFO, "\nRoom id => %s\n", room_id_str);
         field = curl_mime_addpart(form);
         curl_mime_name(field, "roomId");
         curl_mime_data(field, participant->room_id_str, CURL_ZERO_TERMINATED);

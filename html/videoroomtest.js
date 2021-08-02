@@ -48,6 +48,8 @@ if(window.location.protocol === 'http:')
 else
 	server = "https://" + window.location.hostname + ":8089/janus";
 
+var apisecret = "";
+
 var janus = null;
 var sfutest = null;
 var opaqueId = "videoroomtest-"+Janus.randomString(12);
@@ -85,7 +87,7 @@ $(document).ready(function() {
 			janus = new Janus(
 				{
 					server: server,
-					apisecret: "",
+					apisecret: apisecret,
 					success: function() {
 						// Attach to VideoRoom plugin
 						janus.attach(
@@ -97,13 +99,13 @@ $(document).ready(function() {
 									const data = {
 										"janus":"message",
 										"transaction": "xfSG0ZXlWGVt",
+										"apisecret": apisecret,
 										"body":{
 											"publishers": 10,
 											"request" : "create",
 											"record": true,
 											"rec_dir":"/opt/janus/share/janus/recordings"
 										},
-										"apisecret":""
 									}
 									fetch(url,{
 										method: "POST",
@@ -454,7 +456,7 @@ function publishOwnFeed(useAudio) {
 					video: false,
 					record: false,
 					rec_dir: "/opt/janus/share/janus/recordings",
-					filename: janus.getSessionId().toString()
+					filename: myroom.toString() + "-" + myid.toString() + "-" + janus.getSessionId().toString() + "-" + Date.now()
 				};
 				// You can force a specific codec to use when publishing by using the
 				// audiocodec and videocodec properties, for instance:

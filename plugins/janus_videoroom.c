@@ -8229,53 +8229,6 @@ gboolean upload_file(janus_videoroom_publisher *participant){
         curl_mime_filedata(field, file_path_audio);
     }
 
-    /* check for video file present */
-    if(participant->vrc){
-        char file_path_video[128];
-        if(participant->room->rec_dir){
-            strcpy(file_path_video, participant->room->rec_dir);
-            strcat(file_path_video, "/");
-            strcat(file_path_video, participant->vrc->filename);
-        }
-        else{
-            strcpy(file_path_video, participant->vrc->filename);
-        }
-
-        if(!participant_id || !session_id){
-            const size_t LEN = strlen(participant->vrc->filename);
-            size_t row = 0;
-            size_t col = 0;
-            for(size_t i=0; i<LEN; i++){
-                if(participant->vrc->filename[i] == '-'){
-                    bucket[row][col] = '\0'; // for ending string. null terminated
-                    ++row;
-                    col = 0;
-                    // after crossing max limit.
-                    if(row >= MAX_SIZE){
-                        break;
-                    }
-                    continue;
-                }
-                bucket[row][col] = participant->vrc->filename[i];
-                if(col >= MAX_ELEMENT_SIZE){
-                    JANUS_LOG(LOG_ERR, "\nOverflow element from filename.\n");
-                    break;
-                }
-                ++col;
-            }
-            participant_id = (char*)(malloc( strlen(bucket[1]) * sizeof(char)));
-            session_id = (char*)(malloc(strlen(bucket[2]) * sizeof(char)));
-
-            strcpy(participant_id, bucket[1]);
-            strcpy(session_id, bucket[2]);
-        }
-
-        /* Fill in the file upload field */
-        field = curl_mime_addpart(form);
-        curl_mime_name(field, "video");
-        curl_mime_filedata(field, file_path_video);
-    }
-
     /* Free bucket memory */
     for(int i=0; i<4; i++)
         free(bucket[i]);

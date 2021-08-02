@@ -1721,10 +1721,9 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher *participa
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant);
 
 /* @Treeleaf */
-gboolean upload_file(const char *url, janus_videoroom_publisher *participant);
+gboolean upload_file(janus_videoroom_publisher *participant);
 static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
 static void anydone_upload_files(janus_videoroom_publisher *participant);
-static char *substring(char *str, char delimeter);
 /* @Treeleaf */
 
 
@@ -8109,7 +8108,7 @@ static void *janus_videoroom_rtp_forwarder_rtcp_thread(void *data) {
  */
 static void anydone_upload_files(janus_videoroom_publisher *participant){
     gboolean upload_flag = FALSE;
-    upload_flag = upload_file(anydone_upload_url, participant);
+    upload_flag = upload_file(participant);
     if(upload_flag)
         JANUS_LOG(LOG_INFO, "\nSuccessfully uploaded %s to anydone...\n", participant->arc->filename);
     else
@@ -8147,8 +8146,9 @@ static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, v
  * @param url
  * @return
  */
-gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
-    if(url == NULL || participant == NULL){
+
+gboolean upload_file(janus_videoroom_publisher *participant){
+    if(anydone_upload_url == NULL || participant == NULL){
         JANUS_LOG(LOG_ERR, "Either participant or url missing for recording\n");
         return FALSE;
     }
@@ -8159,6 +8159,7 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
     curl_mime *form = NULL;
     curl_mimepart *field = NULL;
     char *session_id = NULL;
+    char *participant_id = NULL;
 
     anydone_http_response *response_data = malloc(sizeof(anydone_http_response));
     response_data->memory = malloc(1);  /* will be grown as needed by the realloc above */
@@ -8172,9 +8173,18 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
     /* Create the form */
     form = curl_mime_init(curl);
 
+    /* container to hold room_id, participant_id, session_id from filename */
+    const size_t MAX_SIZE = 4;
+    char *bucket[4]; // same to MAX_SIZE
+    const size_t MAX_ELEMENT_SIZE = 128;
+    for(size_t i=0; i<MAX_SIZE; i++){
+        char *item = (char*)malloc(sizeof(char) * MAX_ELEMENT_SIZE);
+        bucket[i] = item;
+    }
+
     /* check for audio file present */
     if(participant->arc){
-        char file_path_audio[128];
+        char file_path_audio[128]; // same to MAX_ELEMENT_SIZE
         /* check base path for recording */
         if(participant->room->rec_dir){
             strcpy(file_path_audio, participant->room->rec_dir);
@@ -8185,8 +8195,33 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
             strcpy(file_path_audio, participant->arc->filename);
         }
 
-        /* get session id from file name */
-        session_id = substring(participant->arc->filename, '-');
+        /* get session_id, participant_id from file name */
+        const size_t LEN = strlen(participant->arc->filename);
+        size_t row = 0;
+        size_t col = 0;
+        for(size_t i=0; i<LEN; i++){
+            if(participant->arc->filename[i] == '-'){
+                bucket[row][col] = '\0'; // for ending string. null terminated.
+                ++row;  // go to next String.
+                col = 0;
+                // after crossing max limit.
+                if(row >= MAX_SIZE){
+                    break;
+                }
+                continue;
+            }
+            bucket[row][col] = participant->arc->filename[i];
+            if(col >= MAX_ELEMENT_SIZE){
+                JANUS_LOG(LOG_ERR, "\nOverflow element from filename.\n");
+                break;
+            }
+            ++col;
+        }
+        participant_id = (char*)(malloc( strlen(bucket[1]) * sizeof(char)));
+        session_id = (char*)(malloc(strlen(bucket[2]) * sizeof(char)));
+
+        strcpy(participant_id, bucket[1]);
+        strcpy(session_id, bucket[2]);
 
         /* Fill in the file upload field */
         field = curl_mime_addpart(form);
@@ -8205,11 +8240,45 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
         else{
             strcpy(file_path_video, participant->vrc->filename);
         }
+
+        if(!participant_id || !session_id){
+            const size_t LEN = strlen(participant->vrc->filename);
+            size_t row = 0;
+            size_t col = 0;
+            for(size_t i=0; i<LEN; i++){
+                if(participant->vrc->filename[i] == '-'){
+                    bucket[row][col] = '\0'; // for ending string. null terminated
+                    ++row;
+                    col = 0;
+                    // after crossing max limit.
+                    if(row >= MAX_SIZE){
+                        break;
+                    }
+                    continue;
+                }
+                bucket[row][col] = participant->vrc->filename[i];
+                if(col >= MAX_ELEMENT_SIZE){
+                    JANUS_LOG(LOG_ERR, "\nOverflow element from filename.\n");
+                    break;
+                }
+                ++col;
+            }
+            participant_id = (char*)(malloc( strlen(bucket[1]) * sizeof(char)));
+            session_id = (char*)(malloc(strlen(bucket[2]) * sizeof(char)));
+
+            strcpy(participant_id, bucket[1]);
+            strcpy(session_id, bucket[2]);
+        }
+
         /* Fill in the file upload field */
         field = curl_mime_addpart(form);
         curl_mime_name(field, "video");
         curl_mime_filedata(field, file_path_video);
     }
+
+    /* Free bucket memory */
+    for(int i=0; i<4; i++)
+        free(bucket[i]);
 
     /* Fill the session id field */
     if(session_id){
@@ -8227,6 +8296,14 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
         curl_mime_data(field, participant->room_id_str, CURL_ZERO_TERMINATED);
     }
 
+    /* Fill the participant id field */
+    if(participant_id){
+        JANUS_LOG(LOG_INFO, "\nParticipant id => %s\n", participant_id);
+        field = curl_mime_addpart(form);
+        curl_mime_name(field, "participantId");
+        curl_mime_data(field, participant_id, CURL_ZERO_TERMINATED);
+    }
+
     /* Fill the token field */
     if(anydone_auth_token){
         field = curl_mime_addpart(form);
@@ -8236,7 +8313,7 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
 
     /* what URL that receives this POST */
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
-    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_URL, anydone_upload_url);
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, anydone_http_callback);
@@ -8252,6 +8329,7 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
     free(response_data->memory);
     free(response_data);
     free(session_id);
+    free(participant_id);
 
     curl_easy_cleanup(curl);
 
@@ -8268,29 +8346,4 @@ gboolean upload_file(const char *url, janus_videoroom_publisher *participant){
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     return (http_code == 200)? TRUE: FALSE;
-}
-
-/**
- * @Treeleaf
- * returns a new string by splitting str until it finds delimeter character.
- */
-char *substring(char *str, char delimeter){
-    char *temp = str;
-    while((*temp != '\0') && (*temp != delimeter) ){
-        printf("%c", *temp);
-        temp++;
-    }
-    size_t len = temp-str;
-    if(!len){
-        return NULL;
-    }
-    char *temp_str = (char*)(malloc((len+1)*sizeof(char)));
-    size_t i = 0;
-    while(i<len){
-        temp_str[i] = str[i];
-        i++;
-    }
-    temp_str[i] = '\0';
-
-    return temp_str;
 }

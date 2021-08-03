@@ -1724,6 +1724,8 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 gboolean upload_file(janus_videoroom_publisher *participant);
 static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
 static void anydone_upload_files(janus_videoroom_publisher *participant);
+gboolean validate_filename(const char *file_name);
+gboolean is_digit(char ch);
 /* @Treeleaf */
 
 
@@ -8195,6 +8197,12 @@ gboolean upload_file(janus_videoroom_publisher *participant){
             strcpy(file_path_audio, participant->arc->filename);
         }
 
+        /* Validate Filename whether it contains room_id, participant_id, session_id */
+        if(!validate_filename(participant->arc->filename)){
+            JANUS_LOG(LOG_ERR, "\nInvalid filename should contain room_id, participant_id, session_id seperated by '-'\n");
+            return FALSE;
+        }
+
         /* get session_id, participant_id from file name */
         const size_t LEN = strlen(participant->arc->filename);
         size_t row = 0;
@@ -8299,4 +8307,40 @@ gboolean upload_file(janus_videoroom_publisher *participant){
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     return (http_code == 200)? TRUE: FALSE;
+}
+
+/**
+ * @Treeleaf
+ * @param ch
+ * @return
+ */
+gboolean is_digit(char ch){
+    return ch >= '0' && ch <= '9';
+}
+
+/**
+ * @Treeleaf
+ */
+gboolean validate_filename(const char *file_name){
+    size_t UNIT = 16; // The length of participant id, session id equals to 16.
+    size_t len = strlen(file_name);
+
+    // check minimum length
+    if(len < 3*UNIT+2)
+        return FALSE;
+
+    // After every 17th character should be '-'
+    if(file_name[UNIT] != '-' || file_name[2*UNIT+1] != '-' || file_name[3*UNIT+2] != '-'){
+        return FALSE;
+    }
+
+    // check if other characters except '-' is digit.
+    for(size_t i=0; i<3*UNIT+2; i++){
+        if(i == UNIT || i == 2*UNIT+1 || i == 3*UNIT+2)
+            continue;
+        if(!is_digit(file_name[i]))
+            return FALSE;
+    }
+
+    return TRUE;
 }

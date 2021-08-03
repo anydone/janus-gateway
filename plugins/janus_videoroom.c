@@ -1723,7 +1723,7 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 /* @Treeleaf */
 gboolean upload_file(janus_videoroom_publisher *participant);
 static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
-static void anydone_upload_files(janus_videoroom_publisher *participant);
+static void anydone_delete_files(janus_videoroom_publisher *participant);
 gboolean validate_filename(const char *file_name);
 gboolean is_digit(char ch);
 /* @Treeleaf */
@@ -5688,12 +5688,17 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher *participa
 
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant) {
     /* @Treeleaf */
-    /* Check if audio or video recording */
-    if(participant->arc || participant->vrc){
-	    anydone_upload_files(participant);
-    }
-    
     if(participant->arc) {
+        gboolean upload_flag = FALSE;
+        upload_flag = upload_file(participant);
+        if(upload_flag){
+            JANUS_LOG(LOG_INFO, "\nSuccessfully uploaded %s to anydone...\n", participant->arc->filename);
+            anydone_delete_files(participant);
+        }
+        else
+            JANUS_LOG(LOG_INFO, "\nFail to upload media file to anydone...\n");
+
+
 		janus_recorder *rc = participant->arc;
 		participant->arc = NULL;
 		janus_recorder_close(rc);
@@ -8108,13 +8113,21 @@ static void *janus_videoroom_rtp_forwarder_rtcp_thread(void *data) {
  * @Treeleaf
  * @param participant
  */
-static void anydone_upload_files(janus_videoroom_publisher *participant){
-    gboolean upload_flag = FALSE;
-    upload_flag = upload_file(participant);
-    if(upload_flag)
-        JANUS_LOG(LOG_INFO, "\nSuccessfully uploaded %s to anydone...\n", participant->arc->filename);
-    else
-        JANUS_LOG(LOG_INFO, "\nFail to upload media file to anydone...\n");
+static void anydone_delete_files(janus_videoroom_publisher *participant){
+    if(participant->room){
+        if(participant->room->rec_dir){
+            char audio_file[256];
+            strcpy(audio_file, participant->room->rec_dir);
+            strcat(audio_file, "/");
+            if(participant->arc->filename){
+                strcat(audio_file, participant->arc->filename);
+            }
+            if(remove(audio_file) == 0)
+                JANUS_LOG(LOG_INFO, "\nSuccessfully deleted file %s\n", audio_file);
+            else
+                JANUS_LOG(LOG_INFO, "\nCouldn't delete file %s\n", audio_file);
+        }
+    }
 }
 
 /**

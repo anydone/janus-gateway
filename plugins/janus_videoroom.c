@@ -8322,22 +8322,33 @@ gboolean is_digit(char ch){
  * @Treeleaf
  */
 gboolean validate_filename(const char *file_name){
-    size_t UNIT = 16; // The length of participant id, session id equals to 16.
     size_t len = strlen(file_name);
 
     // check minimum length
-    if(len < 3*UNIT+2)
+    if(len < 48)
         return FALSE;
 
-    // After every 17th character should be '-'
-    if(file_name[UNIT] != '-' || file_name[2*UNIT+1] != '-' || file_name[3*UNIT+2] != '-'){
-        return FALSE;
+    // count '-' characters
+    size_t count = 0;
+    size_t dash_position[4] = {-1, -1, -1, -1};
+    for(size_t i=0; i<len; i++){
+        if(file_name[i] == '-'){
+            dash_position[count] = i;
+            ++count;
+        }
+        if(count > 3)
+            break;
     }
 
-    // check if other characters except '-' is digit.
-    for(size_t i=0; i<3*UNIT+2; i++){
-        if(i == UNIT || i == 2*UNIT+1 || i == 3*UNIT+2)
-            continue;
+    if(count < 3)
+        return FALSE;
+
+    for(size_t i=dash_position[0]+1; i<dash_position[1]; i++){
+        if(!is_digit(file_name[i]))
+            return FALSE;
+    }
+
+    for(size_t i=dash_position[1]+1; i<dash_position[2]; i++){
         if(!is_digit(file_name[i]))
             return FALSE;
     }

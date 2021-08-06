@@ -8332,12 +8332,14 @@ gboolean is_digit(char ch){
 }
 
 /**
+ * Filename contains session id, room id and participant id seperated by dash(-).
+ * we should verify if we got it so that we can send it to server for recording media.
  * @Treeleaf
  */
 gboolean validate_filename(const char *file_name){
     size_t len = strlen(file_name);
 
-    // check minimum length
+    // check minimum length of filename should contain.
     if(len < 48)
         return FALSE;
 
@@ -8353,17 +8355,30 @@ gboolean validate_filename(const char *file_name){
             break;
     }
 
+    // check if dashes(-) count is at least 3. i.e roomid-participantid-sessionid-date
     if(count < 3)
         return FALSE;
 
+    // check if participant id is number.
     for(size_t i=dash_position[0]+1; i<dash_position[1]; i++){
         if(!is_digit(file_name[i]))
             return FALSE;
     }
 
+    // check if session id is number.
     for(size_t i=dash_position[1]+1; i<dash_position[2]; i++){
         if(!is_digit(file_name[i]))
             return FALSE;
+    }
+
+    // check if length of participant id is at least 5.
+    if((dash_position[1] - dash_position[0]) < 5){
+        return FALSE;
+    }
+
+    // check if length of session id is at least 5.
+    if((dash_position[2] - dash_position[1]) < 5){
+        return FALSE;
     }
 
     return TRUE;

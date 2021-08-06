@@ -8340,7 +8340,7 @@ gboolean validate_filename(const char *file_name){
     size_t len = strlen(file_name);
 
     // check minimum length of filename should contain.
-    if(len < 48)
+    if(len < 32)
         return FALSE;
 
     // count '-' characters

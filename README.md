@@ -347,3 +347,33 @@ Janus is thoroughly documented. You can find the current documentation, automati
 Any thought, feedback or (hopefully not!) insult is welcome!
 
 Developed by [@meetecho](https://github.com/meetecho)
+
+## Anydone Janus Documentation
+
+## Authentication
+In config file <install-dir>/etc/janus/`janus.jcfg` in `general` section provide authentication url using `anydone_auth_url = "https://url_for_auth"`
+
+## Recordings
+ Go to <install-dir>/etc/janus/`janus.plugin.videoroom.jcfg` and provide following credentials in general section in order to upload recorded .mjr file to anydone eg:- <br/>
+ general:{
+ <br/>
+ 	`anydone_upload_url = "url to upload file"`
+ 	`anydone_auth_token = "token given by anydone server"`
+ }
+ <br/>
+ Following data should be provided in `room-create` api in client-side or for demo room in `janus.plugin.videoroom.jcfg`<br/>
+ room-1234:{<br/>
+ 	`record: true or false` <br/>
+ 	`rec_dir: "/opt/janus/share/janus/recordings"`<br/>	
+ }<br/>
+Following data should be provided in <br/> 
+sfuTest.createOffer => success <br/>
+ var publish = { <br/>
+ request: "configure",<br/>
+ record: true or false,<br/>
+ rec_dir: "/opt/janus/share/janus/recordings",<br/>
+ filename: session_id-room_id</br>
+ };<br/>
+
+`session_id` must be provided in filename section otherwise recording can't succeed. room_id is not mandatory but it will be nice to have because same filename will be created.
+ 

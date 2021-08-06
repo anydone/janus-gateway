@@ -222,6 +222,7 @@ MemoryStruct* call_request(CURL *curl, const char *url, char *user_data){
     response_data->memory = malloc(1);  /* will be grown as needed by the realloc above */
     response_data->size = 0;    /* no data at this point */
 
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, user_data);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
@@ -234,15 +235,11 @@ MemoryStruct* call_request(CURL *curl, const char *url, char *user_data){
     if (res != CURLE_OK)
         JANUS_LOG(LOG_ERR, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
 
-    /* always cleanup */
-    curl_easy_cleanup(curl);
-
     return response_data;
 }
 
 gboolean authenticate(const char *url, const char *user_data){
     CURL *curl;
-    curl_global_init(CURL_GLOBAL_ALL);
     curl = curl_easy_init();
 
     if(!curl)
@@ -265,7 +262,9 @@ gboolean authenticate(const char *url, const char *user_data){
     free(post_data);
     curl_free(encoded_token);
     curl_free(encoded_token_val);
-    curl_global_cleanup();
+
+    /* always cleanup */
+    curl_easy_cleanup(curl);
 
     /* get http code and return TRUE for success */
     long http_code = 0;
@@ -4166,6 +4165,9 @@ gboolean janus_plugin_auth_signature_contains(janus_plugin *plugin, const char *
 /* Main */
 gint main(int argc, char *argv[])
 {
+    //@Treeleaf
+    curl_global_init(CURL_GLOBAL_ALL);
+
 	/* Core dumps may be disallowed by parent of this process; change that */
 	struct rlimit core_limits;
 	core_limits.rlim_cur = core_limits.rlim_max = RLIM_INFINITY;
@@ -5743,6 +5745,9 @@ gint main(int argc, char *argv[])
 	janus_mutex_unlock(&counters_mutex);
 #endif
 	g_clear_pointer(&janus_log_global_prefix, g_free);
+
+	//@Treeleaf
+    curl_global_cleanup();
 
 	JANUS_PRINT("Bye!\n");
 

@@ -8365,19 +8365,13 @@ gboolean validate_filename(const char *file_name){
             return FALSE;
     }
 
-    // check if session id is number.
-    for(size_t i=dash_position[1]+1; i<dash_position[2]; i++){
-        if(!is_digit(file_name[i]))
-            return FALSE;
-    }
-
-    // check if length of participant id is at least 5.
-    if((dash_position[1] - dash_position[0]) < 5){
+    // check if length of participant id is at least 8.
+    if((dash_position[1] - dash_position[0]) < 8){
         return FALSE;
     }
 
-    // check if length of session id is at least 5.
-    if((dash_position[2] - dash_position[1]) < 5){
+    // check if length of session id is at least 8.
+    if((dash_position[2] - dash_position[1]) < 8){
         return FALSE;
     }
 

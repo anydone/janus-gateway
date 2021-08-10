@@ -8396,8 +8396,6 @@ gboolean upload_file(janus_videoroom_publisher *participant){
     /* always cleanup */
     free(response_data->memory);
     free(response_data);
-    free(session_id);
-    free(participant_id);
     curl_easy_cleanup(curl);
 
     /* then cleanup the form */

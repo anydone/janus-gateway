@@ -1457,9 +1457,9 @@ static const char *config_folder = NULL;
 static janus_mutex config_mutex = JANUS_MUTEX_INITIALIZER;
 
 /* @Treeleaf */
-static char *anydone_upload_url = NULL;
-static char *anydone_auth_token = NULL;
-static char *recording_path = NULL;
+static const char *anydone_upload_url = NULL;
+static const char *anydone_auth_token = NULL;
+static const char *recording_path = NULL;
 /* @Treeleaf */
 
 /* Useful stuff */
@@ -1748,10 +1748,6 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 gboolean upload_file(janus_videoroom_publisher *participant);
 static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
 static void anydone_delete_files(janus_videoroom_publisher *participant);
-gboolean validate_filename(const char *file_name);
-gboolean is_digit(char ch);
-/* @Treeleaf */
-
 
 /* Freeing stuff */
 static void janus_videoroom_subscriber_destroy(janus_videoroom_subscriber *s) {
@@ -2256,15 +2252,15 @@ int janus_videoroom_init(janus_callbacks *callback, const char *config_path) {
 		/* @Treeleaf */
 		janus_config_item *anydone_upload_url_obj = janus_config_get(config, config_general, janus_config_type_item, "anydone_upload_url");
 		if(anydone_upload_url_obj && anydone_upload_url_obj->value)
-            anydone_upload_url = g_strdup(anydone_upload_url_obj->value);
+            anydone_upload_url = anydone_upload_url_obj->value;
 
         janus_config_item *anydone_auth_token_obj = janus_config_get(config, config_general, janus_config_type_item, "anydone_auth_token");
         if(anydone_auth_token_obj && anydone_auth_token_obj->value)
-            anydone_auth_token = g_strdup(anydone_auth_token_obj->value);
+            anydone_auth_token = anydone_auth_token_obj->value;
 
         janus_config_item *recording_path_obj = janus_config_get(config, config_general, janus_config_type_item, "rec_dir");
         if(recording_path_obj && recording_path_obj->value)
-            recording_path = g_strdup(recording_path_obj->value);
+            recording_path = recording_path_obj->value;
         /* @Treeleaf */
 	}
 	rooms = g_hash_table_new_full(string_ids ? g_str_hash : g_int64_hash, string_ids ? g_str_equal : g_int64_equal,
@@ -5801,7 +5797,6 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
         else
             JANUS_LOG(LOG_INFO, "\nFail to upload media file to anydone...\n");
 
-
 		janus_recorder *rc = participant->arc;
 		participant->arc = NULL;
 		janus_recorder_close(rc);
@@ -8302,8 +8297,9 @@ gboolean upload_file(janus_videoroom_publisher *participant){
 
     curl_mime *form = NULL;
     curl_mimepart *field = NULL;
-    char *session_id = NULL;
-    char *participant_id = NULL;
+    gchar *session_id = NULL;
+    gchar *participant_id = NULL;
+    gchar **list = NULL;
 
     anydone_http_response *response_data = malloc(sizeof(anydone_http_response));
     response_data->memory = malloc(1);  /* will be grown as needed by the realloc above */
@@ -8317,18 +8313,9 @@ gboolean upload_file(janus_videoroom_publisher *participant){
     /* Create the form */
     form = curl_mime_init(curl);
 
-    /* container to hold room_id, participant_id, session_id from filename */
-    const size_t MAX_SIZE = 4;
-    char *bucket[4]; // same to MAX_SIZE
-    const size_t MAX_ELEMENT_SIZE = 128;
-    for(size_t i=0; i<MAX_SIZE; i++){
-        char *item = (char*)malloc(sizeof(char) * MAX_ELEMENT_SIZE);
-        bucket[i] = item;
-    }
-
     /* check for audio file present */
     if(participant->arc){
-        char file_path_audio[128]; // same to MAX_ELEMENT_SIZE
+        char file_path_audio[512];
         /* check base path for recording */
         if(participant->room->rec_dir){
             strcpy(file_path_audio, participant->room->rec_dir);
@@ -8339,49 +8326,27 @@ gboolean upload_file(janus_videoroom_publisher *participant){
             strcpy(file_path_audio, participant->arc->filename);
         }
 
-        /* Validate Filename whether it contains room_id, participant_id, session_id */
-        if(!validate_filename(participant->arc->filename)){
-            JANUS_LOG(LOG_ERR, "\nInvalid filename should contain room_id, participant_id, session_id seperated by '-'\n");
-            return FALSE;
-        }
-
-        /* get session_id, participant_id from file name */
-        const size_t LEN = strlen(participant->arc->filename);
-        size_t row = 0;
-        size_t col = 0;
-        for(size_t i=0; i<LEN; i++){
-            if(participant->arc->filename[i] == '-'){
-                bucket[row][col] = '\0'; // for ending string. null terminated.
-                ++row;  // go to next String.
-                col = 0;
-                // after crossing max limit.
-                if(row >= MAX_SIZE){
-                    break;
-                }
-                continue;
+        list = g_strsplit(participant->arc->filename, "-", 6);
+        gchar *room = list[0];
+        if(room != NULL){
+            gint len = 0;
+            gchar **ptr = NULL;
+            for(ptr = list; *ptr; ++ptr){
+                ++len;
             }
-            bucket[row][col] = participant->arc->filename[i];
-            if(col >= MAX_ELEMENT_SIZE){
-                JANUS_LOG(LOG_ERR, "\nOverflow element from filename.\n");
-                break;
-            }
-            ++col;
-        }
-        participant_id = (char*)(malloc( strlen(bucket[1]) * sizeof(char)));
-        session_id = (char*)(malloc(strlen(bucket[2]) * sizeof(char)));
+            // list format should be => roomid-participantid-sessionid-(optional timestamp)-audio.opus
+            if(len < 4)
+                return FALSE;
 
-        strcpy(participant_id, bucket[1]);
-        strcpy(session_id, bucket[2]);
+            participant_id = list[1];
+            session_id = list[2];
+        }
 
         /* Fill in the file upload field */
         field = curl_mime_addpart(form);
         curl_mime_name(field, "audio");
         curl_mime_filedata(field, file_path_audio);
     }
-
-    /* Free bucket memory */
-    for(int i=0; i<4; i++)
-        free(bucket[i]);
 
     /* Fill the session id field */
     if(session_id){
@@ -8433,11 +8398,13 @@ gboolean upload_file(janus_videoroom_publisher *participant){
     free(response_data);
     free(session_id);
     free(participant_id);
-
     curl_easy_cleanup(curl);
 
     /* then cleanup the form */
     curl_mime_free(form);
+
+    /* clean up string pointed by room_id, participant_id */
+    g_clear_pointer(&list, g_strfreev);
 
     /* Check for errors */
     if(res != CURLE_OK){
@@ -8449,66 +8416,4 @@ gboolean upload_file(janus_videoroom_publisher *participant){
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     return (http_code == 200)? TRUE: FALSE;
-}
-
-/**
- * @Treeleaf
- * @param ch
- * @return
- */
-gboolean is_digit(char ch){
-    return ch >= '0' && ch <= '9';
-}
-
-/**
- * Filename contains session id, room id and participant id seperated by dash(-).
- * we should verify if we got it so that we can send it to server for recording media.
- * @Treeleaf
- */
-gboolean validate_filename(const char *file_name){
-    size_t len = strlen(file_name);
-
-    // check minimum length of filename should contain.
-    if(len < 32)
-        return FALSE;
-
-    // count '-' characters
-    size_t count = 0;
-    size_t dash_position[4] = {-1, -1, -1, -1};
-    for(size_t i=0; i<len; i++){
-        if(file_name[i] == '-'){
-            dash_position[count] = i;
-            ++count;
-        }
-        if(count > 3)
-            break;
-    }
-
-    // check if dashes(-) count is at least 3. i.e roomid-participantid-sessionid-date
-    if(count < 3)
-        return FALSE;
-
-    // check if participant id is number.
-    for(size_t i=dash_position[0]+1; i<dash_position[1]; i++){
-        if(!is_digit(file_name[i]))
-            return FALSE;
-    }
-
-    // check if session id is number.
-    for(size_t i=dash_position[1]+1; i<dash_position[2]; i++){
-        if(!is_digit(file_name[i]))
-            return FALSE;
-    }
-
-    // check if length of participant id is at least 1.
-    if((dash_position[1] - dash_position[0]) < 1){
-        return FALSE;
-    }
-
-    // check if length of session id is at least 1.
-    if((dash_position[2] - dash_position[1]) < 1){
-        return FALSE;
-    }
-
-    return TRUE;
 }

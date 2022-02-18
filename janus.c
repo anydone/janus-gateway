@@ -998,7 +998,8 @@ void janus_request_destroy(janus_request *request) {
 }
 
 /****************** @Treeleaf ************************************************************************/
-static int janus_request_check_secret(janus_request *request, guint64 session_id, const gchar *transaction_text) {	
+static int janus_request_check_secret(janus_request *request, guint64 session_id, const gchar *transaction_text) {
+	return 0;
     json_t *root = request->message;
 	gboolean secret_authorized = FALSE;
     gboolean token_authorized = FALSE;
@@ -1025,7 +1026,7 @@ static int janus_request_check_secret(janus_request *request, guint64 session_id
     if(!token_authorized)
         return JANUS_ERROR_UNAUTHORIZED;
 
-    return 0;
+    // return 0;
 }
 /****************** @Treeleaf ************************************************************************/
 

@@ -48,7 +48,9 @@ if(window.location.protocol === 'http:')
 else
 	server = "https://" + window.location.hostname + ":8089/janus";
 
-	server = "https://mediaserver-mumbai-a.anydone.com/janus";
+	// server = "https://mediaserver-mumbai-a.anydone.com/janus";
+
+	// server = "https://mediaserver.anydone.net/janus/";
 
 var janus = null;
 var sfutest = null;

@@ -1,52 +1,7 @@
-// We make use of this 'server' variable to provide the address of the
-// REST Janus API. By default, in this example we assume that Janus is
-// co-located with the web server hosting the HTML pages but listening
-// on a different port (8088, the default for HTTP in Janus), which is
-// why we make use of the 'window.location.hostname' base address. Since
-// Janus can also do HTTPS, and considering we don't really want to make
-// use of HTTP for Janus if your demos are served on HTTPS, we also rely
-// on the 'window.location.protocol' prefix to build the variable, in
-// particular to also change the port used to contact Janus (8088 for
-// HTTP and 8089 for HTTPS, if enabled).
-// In case you place Janus behind an Apache frontend (as we did on the
-// online demos at http://janus.conf.meetecho.com) you can just use a
-// relative path for the variable, e.g.:
-//
-// 		var server = "/janus";
-//
-// which will take care of this on its own.
-//
-//
-// If you want to use the WebSockets frontend to Janus, instead, you'll
-// have to pass a different kind of address, e.g.:
-//
-// 		var server = "ws://" + window.location.hostname + ":8188";
-//
-// Of course this assumes that support for WebSockets has been built in
-// when compiling the server. WebSockets support has not been tested
-// as much as the REST API, so handle with care!
-//
-//
-// If you have multiple options available, and want to let the library
-// autodetect the best way to contact your server (or pool of servers),
-// you can also pass an array of servers, e.g., to provide alternative
-// means of access (e.g., try WebSockets first and, if that fails, fall
-// back to plain HTTP) or just have failover servers:
-//
-//		var server = [
-//			"ws://" + window.location.hostname + ":8188",
-//			"/janus"
-//		];
-//
-// This will tell the library to try connecting to each of the servers
-// in the presented order. The first working server will be used for
-// the whole session.
-//
-var server = null;
-if(window.location.protocol === 'http:')
-	server = "http://" + window.location.hostname + ":8088/janus";
-else
-	server = "https://" + window.location.hostname + ":8089/janus";
+// We import the settings.js file to know which address we should contact
+// to talk to Janus, and optionally which STUN/TURN servers should be
+// used as well. Specifically, that file defines the "server" and
+// "iceServers" properties we'll pass when creating the Janus session.
 
 var janus = null;
 var echotest = null;
@@ -61,16 +16,28 @@ var audioenabled = false;
 var videoenabled = false;
 
 var doSimulcast = (getQueryStringValue("simulcast") === "yes" || getQueryStringValue("simulcast") === "true");
-var doSimulcast2 = (getQueryStringValue("simulcast2") === "yes" || getQueryStringValue("simulcast2") === "true");
 var doSvc = getQueryStringValue("svc");
 if(doSvc === "")
 	doSvc = null;
 var acodec = (getQueryStringValue("acodec") !== "" ? getQueryStringValue("acodec") : null);
 var vcodec = (getQueryStringValue("vcodec") !== "" ? getQueryStringValue("vcodec") : null);
 var vprofile = (getQueryStringValue("vprofile") !== "" ? getQueryStringValue("vprofile") : null);
+var stereo = false;
+if(getQueryStringValue("stereo") !== "")
+	stereo = (getQueryStringValue("stereo") === "true");
 var doDtx = (getQueryStringValue("dtx") === "yes" || getQueryStringValue("dtx") === "true");
 var doOpusred = (getQueryStringValue("opusred") === "yes" || getQueryStringValue("opusred") === "true");
 var simulcastStarted = false;
+
+// By default we talk to the "regular" EchoTest plugin
+var echotestPluginBackend = "janus.plugin.echotest";
+// We can use query string arguments to talk to the Lua or Duktape EchoTest
+// demo scripts instead. Notice that this assumes that the Lua or Duktape
+// plugins are configured to run the sample scripts that comes with the repo
+if(getQueryStringValue("plugin") === "lua")
+	echotestPluginBackend = "janus.plugin.echolua";
+else if(getQueryStringValue("plugin") === "duktape")
+	echotestPluginBackend = "janus.plugin.echojs";
 
 $(document).ready(function() {
 	// Initialize the library (all console debuggers enabled)
@@ -87,11 +54,7 @@ $(document).ready(function() {
 			janus = new Janus(
 				{
 					server: server,
-					// No "iceServers" is provided, meaning janus.js will use a default STUN server
-					// Here are some examples of how an iceServers field may look like to support TURN
-					// 		iceServers: [{urls: "turn:yourturnserver.com:3478", username: "janususer", credential: "januspwd"}],
-					// 		iceServers: [{urls: "turn:yourturnserver.com:443?transport=tcp", username: "janususer", credential: "januspwd"}],
-					// 		iceServers: [{urls: "turns:yourturnserver.com:443?transport=tcp", username: "janususer", credential: "januspwd"}],
+					iceServers: iceServers,
 					// Should the Janus API require authentication, you can specify either the API secret or user token here too
 					//		token: "mytoken",
 					//	or
@@ -100,7 +63,7 @@ $(document).ready(function() {
 						// Attach to EchoTest plugin
 						janus.attach(
 							{
-								plugin: "janus.plugin.echotest",
+								plugin: echotestPluginBackend,
 								opaqueId: opaqueId,
 								success: function(pluginHandle) {
 									$('#details').remove();
@@ -132,13 +95,16 @@ $(document).ready(function() {
 											// pass a ?simulcast=true when opening this demo page: it will turn
 											// the following 'simulcast' property to pass to janus.js to true
 											simulcast: doSimulcast,
-											simulcast2: doSimulcast2,
 											svc: (vcodec === 'av1' && doSvc) ? doSvc : null,
 											customizeSdp: function(jsep) {
 												// If DTX is enabled, munge the SDP
 												if(doDtx) {
 													jsep.sdp = jsep.sdp
 														.replace("useinbandfec=1", "useinbandfec=1;usedtx=1")
+												}
+												if(stereo && jsep.sdp.indexOf("stereo=1") == -1) {
+													// Make sure that our offer contains stereo too
+													jsep.sdp = jsep.sdp.replace("useinbandfec=1", "useinbandfec=1;stereo=1");
 												}
 											},
 											success: function(jsep) {

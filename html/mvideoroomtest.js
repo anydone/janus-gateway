@@ -1,52 +1,7 @@
-// We make use of this 'server' variable to provide the address of the
-// REST Janus API. By default, in this example we assume that Janus is
-// co-located with the web server hosting the HTML pages but listening
-// on a different port (8088, the default for HTTP in Janus), which is
-// why we make use of the 'window.location.hostname' base address. Since
-// Janus can also do HTTPS, and considering we don't really want to make
-// use of HTTP for Janus if your demos are served on HTTPS, we also rely
-// on the 'window.location.protocol' prefix to build the variable, in
-// particular to also change the port used to contact Janus (8088 for
-// HTTP and 8089 for HTTPS, if enabled).
-// In case you place Janus behind an Apache frontend (as we did on the
-// online demos at http://janus.conf.meetecho.com) you can just use a
-// relative path for the variable, e.g.:
-//
-// 		var server = "/janus";
-//
-// which will take care of this on its own.
-//
-//
-// If you want to use the WebSockets frontend to Janus, instead, you'll
-// have to pass a different kind of address, e.g.:
-//
-// 		var server = "ws://" + window.location.hostname + ":8188";
-//
-// Of course this assumes that support for WebSockets has been built in
-// when compiling the server. WebSockets support has not been tested
-// as much as the REST API, so handle with care!
-//
-//
-// If you have multiple options available, and want to let the library
-// autodetect the best way to contact your server (or pool of servers),
-// you can also pass an array of servers, e.g., to provide alternative
-// means of access (e.g., try WebSockets first and, if that fails, fall
-// back to plain HTTP) or just have failover servers:
-//
-//		var server = [
-//			"ws://" + window.location.hostname + ":8188",
-//			"/janus"
-//		];
-//
-// This will tell the library to try connecting to each of the servers
-// in the presented order. The first working server will be used for
-// the whole session.
-//
-var server = null;
-if(window.location.protocol === 'http:')
-	server = "http://" + window.location.hostname + ":8088/janus";
-else
-	server = "https://" + window.location.hostname + ":8089/janus";
+// We import the settings.js file to know which address we should contact
+// to talk to Janus, and optionally which STUN/TURN servers should be
+// used as well. Specifically, that file defines the "server" and
+// "iceServers" properties we'll pass when creating the Janus session.
 
 	// server = "https://mediaserver-mumbai-a.anydone.com/janus";
 
@@ -71,7 +26,6 @@ var localTracks = {}, localVideos = 0, remoteTracks = {};
 var bitrateTimer = [], simulcastStarted = {};
 
 var doSimulcast = (getQueryStringValue("simulcast") === "yes" || getQueryStringValue("simulcast") === "true");
-var doSimulcast2 = (getQueryStringValue("simulcast2") === "yes" || getQueryStringValue("simulcast2") === "true");
 var acodec = (getQueryStringValue("acodec") !== "" ? getQueryStringValue("acodec") : null);
 var vcodec = (getQueryStringValue("vcodec") !== "" ? getQueryStringValue("vcodec") : null);
 var subscriber_mode = (getQueryStringValue("subscriber-mode") === "yes" || getQueryStringValue("subscriber-mode") === "true");
@@ -91,6 +45,11 @@ $(document).ready(function() {
 			janus = new Janus(
 				{
 					server: server,
+					iceServers: iceServers,
+					// Should the Janus API require authentication, you can specify either the API secret or user token here too
+					//		token: "mytoken",
+					//	or
+					//		apisecret: "serversecret",
 					success: function() {
 						// Attach to video room test plugin
 						janus.attach(
@@ -189,6 +148,8 @@ $(document).ready(function() {
 												Janus.debug("Got a list of available publishers/feeds:", list);
 												var sources = null;
 												for(var f in list) {
+													if(list[f]["dummy"])
+														continue;
 													var id = list[f]["id"];
 													var display = list[f]["display"];
 													var streams = list[f]["streams"];
@@ -235,6 +196,8 @@ $(document).ready(function() {
 												Janus.debug("Got a list of available publishers/feeds:", list);
 												var sources = null;
 												for(var f in list) {
+													if(list[f]["dummy"])
+														continue;
 													var id = list[f]["id"];
 													var display = list[f]["display"];
 													var streams = list[f]["streams"];
@@ -485,7 +448,6 @@ function publishOwnFeed(useAudio) {
 			// pass a ?simulcast=true when opening this demo page: it will turn
 			// the following 'simulcast' property to pass to janus.js to true
 			simulcast: doSimulcast,
-			simulcast2: doSimulcast2,
 			success: function(jsep) {
 				Janus.debug("Got publisher SDP!");
 				Janus.debug(jsep);
@@ -536,9 +498,17 @@ function unpublishOwnFeed() {
 	sfutest.send({ message: unpublish });
 }
 
-var creatingFeed = false;
+var creatingSubscription = false;
 function subscribeTo(sources) {
-	// New feeds are available, do we need create a new plugin handle first?
+	// Check if we're still creating the subscription handle
+	if(creatingSubscription) {
+		// Still working on the handle, send this request later when it's ready
+		setTimeout(function() {
+			subscribeTo(sources);
+		}, 500);
+		return;
+	}
+	// If we already have a working subscription handle, just update that one
 	if(remoteFeed) {
 		// Prepare the streams to subscribe to, as an array: we have the list of
 		// streams the feeds are publishing, so we can choose what to pick or skip
@@ -594,17 +564,11 @@ function subscribeTo(sources) {
 			request: "subscribe",
 			streams: subscription
 		}});
+		// Nothing else we need to do
 		return;
 	}
-	// We don't have a handle yet, but we may be creating one already
-	if(creatingFeed) {
-		// Still working on the handle
-		setTimeout(function() {
-			subscribeTo(sources);
-		}, 500);
-		return;
-	}
-	creatingFeed = true;
+	// If we got here, we're creating a new handle for the subscriptions (we only need one)
+	creatingSubscription = true;
 	janus.attach(
 		{
 			plugin: "janus.plugin.videoroom",
@@ -693,7 +657,8 @@ function subscribeTo(sources) {
 					bootbox.alert(msg["error"]);
 				} else if(event) {
 					if(event === "attached") {
-						creatingFeed = false;
+						// Now we have a working subscription, next requests will update this one
+						creatingSubscription = false;
 						Janus.log("Successfully attached to feed in room " + msg["room"]);
 					} else if(event === "event") {
 						// Check if we got an event on a simulcast-related event from this publisher
@@ -858,11 +823,7 @@ function subscribeTo(sources) {
 			oncleanup: function() {
 				Janus.log(" ::: Got a cleanup notification (remote feed) :::");
 				for(var i=1;i<6;i++) {
-					$('#remotevideo'+i).remove();
-					$('#waitingvideo'+i).remove();
-					$('#novideo'+i).remove();
-					$('#curbitrate'+i).remove();
-					$('#curres'+i).remove();
+					$('#videoremote'+i).empty();
 					if(bitrateTimer[i])
 						clearInterval(bitrateTimer[i]);
 					bitrateTimer[i] = null;

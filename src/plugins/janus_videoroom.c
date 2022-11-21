@@ -2268,7 +2268,6 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher_stream *ps
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant);
 
 /* @Treeleaf */
-gboolean upload_file(janus_videoroom_publisher *participant);
 gboolean upload_media_file(janus_videoroom_media type, const char* session_id, const char* room_id, const char* participant_id, const char *filename);
 static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
 static void anydone_delete_files(janus_videoroom_publisher *participant);
@@ -7499,14 +7498,6 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher_stream *ps
 }
 
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant) {
-	// gboolean upload_flag = FALSE;
-	// printf("recording filename => %s\n", participant->recording_base);
-	// upload_flag = upload_file(participant);
-	// if(upload_flag){
-	//     JANUS_LOG(LOG_INFO, "\nSuccessfully uploaded %s to anydone...\n", participant->arc->filename);
-	//     anydone_delete_files(participant);
-	// }
-
 	GList *temp = participant->streams;
 	while(temp) {
 		janus_videoroom_publisher_stream *ps = (janus_videoroom_publisher_stream *)temp->data;
@@ -11522,140 +11513,3 @@ gboolean upload_media_file(janus_videoroom_media type,
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     return (http_code == 200)? TRUE: FALSE;
 }
-
-
-/**
- * @Treeleaf
- * Reference:- https://curl.se/libcurl/c/postit2.html
- * @param url
- * @return
- */
-// gboolean upload_file(janus_videoroom_publisher *participant){
-//     if(anydone_upload_url == NULL || participant == NULL){
-//         JANUS_LOG(LOG_ERR, "Either participant or url missing for recording\n");
-//         return FALSE;
-//     }
-
-//     CURL *curl;
-//     CURLcode res;
-
-//     curl_mime *form = NULL;
-//     curl_mimepart *field = NULL;
-//     gchar *session_id = NULL;
-//     gchar *participant_id = NULL;
-//     gchar **list = NULL;
-
-//     anydone_http_response *response_data = malloc(sizeof(anydone_http_response));
-//     response_data->memory = malloc(1);  /* will be grown as needed by the realloc above */
-//     response_data->size = 0;    /* no data at this point */
-
-//     curl = curl_easy_init();
-
-//     if(!curl)
-//         return CURLE_FAILED_INIT;
-
-//     /* Create the form */
-//     form = curl_mime_init(curl);
-
-//     /* check for audio file present */
-//     if(participant->arc){
-//         char file_path_audio[512];
-//         /* check base path for recording */
-//         if(participant->room->rec_dir){
-//             strcpy(file_path_audio, participant->room->rec_dir);
-//             strcat(file_path_audio, "/");
-//             strcat(file_path_audio, participant->arc->filename);
-//         }
-//         else{
-//             strcpy(file_path_audio, participant->arc->filename);
-//         }
-
-//         list = g_strsplit(participant->arc->filename, "-", 6);
-//         gchar *room = list[0];
-//         if(room != NULL){
-//             gint len = 0;
-//             gchar **ptr = NULL;
-//             for(ptr = list; *ptr; ++ptr){
-//                 ++len;
-//             }
-//             // list format should be => roomid-participantid-sessionid-(optional timestamp)-audio.opus
-//             if(len < 4)
-//                 return FALSE;
-
-//             participant_id = list[1];
-//             session_id = list[2];
-//         }
-
-//         /* Fill in the file upload field */
-//         field = curl_mime_addpart(form);
-//         curl_mime_name(field, "audio");
-//         curl_mime_filedata(field, file_path_audio);
-//     }
-
-//     /* Fill the session id field */
-//     if(session_id){
-//         JANUS_LOG(LOG_INFO, "\nSession id => %s\n", session_id);
-//         field = curl_mime_addpart(form);
-//         curl_mime_name(field, "sessionId");
-//         curl_mime_data(field, session_id, CURL_ZERO_TERMINATED);
-//     }
-
-//     /* Fill the room id field */
-//     if(participant->room_id_str){
-//         JANUS_LOG(LOG_INFO, "\nRoom id => %s\n", participant->room_id_str);
-//         field = curl_mime_addpart(form);
-//         curl_mime_name(field, "roomId");
-//         curl_mime_data(field, participant->room_id_str, CURL_ZERO_TERMINATED);
-//     }
-
-//     /* Fill the participant id field */
-//     if(participant_id){
-//         JANUS_LOG(LOG_INFO, "\nParticipant id => %s\n", participant_id);
-//         field = curl_mime_addpart(form);
-//         curl_mime_name(field, "participantId");
-//         curl_mime_data(field, participant_id, CURL_ZERO_TERMINATED);
-//     }
-
-//     /* Fill the token field */
-//     if(anydone_auth_token){
-//         field = curl_mime_addpart(form);
-//         curl_mime_name(field, "token");
-//         curl_mime_data(field, anydone_auth_token, CURL_ZERO_TERMINATED);
-//     }
-
-//     /* what URL that receives this POST */
-//     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
-//     curl_easy_setopt(curl, CURLOPT_URL, anydone_upload_url);
-//     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
-//     curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
-//     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, anydone_http_callback);
-//     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) response_data);
-
-//     /* Perform the request, res will get the return code */
-//     res = curl_easy_perform(curl);
-
-//     if(response_data->memory)
-//         JANUS_LOG(LOG_INFO, "\nUpload .mjr file response %s\n", response_data->memory);
-
-//     /* always cleanup */
-//     free(response_data->memory);
-//     free(response_data);
-//     curl_easy_cleanup(curl);
-
-//     /* then cleanup the form */
-//     curl_mime_free(form);
-
-//     /* clean up string pointed by room_id, participant_id */
-//     g_clear_pointer(&list, g_strfreev);
-
-//     /* Check for errors */
-//     if(res != CURLE_OK){
-//         JANUS_LOG(LOG_ERR, "\nUpload file to anydone failed: %s\n", curl_easy_strerror(res));
-//         return FALSE;
-//     }
-
-//     /* get http code and return TRUE for success */
-//     long http_code = 0;
-//     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-//     return (http_code == 200)? TRUE: FALSE;
-// }

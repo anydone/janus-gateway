@@ -31,7 +31,38 @@ var vcodec = (getQueryStringValue("vcodec") !== "" ? getQueryStringValue("vcodec
 var subscriber_mode = (getQueryStringValue("subscriber-mode") === "yes" || getQueryStringValue("subscriber-mode") === "true");
 var use_msid = (getQueryStringValue("msid") === "yes" || getQueryStringValue("msid") === "true");
 
+var record = false;
+
 $(document).ready(function() {
+	document.getElementById("record").addEventListener('click', (event)=>{
+		console.log("Button clicked ", event);
+		const url = "http://localhost:8088/janus";
+		record = !record;
+
+		const payload = {
+			"request":"enable_recording",				
+			"room": "1234",
+			"record": record
+		};
+
+		fetch(url, {
+			method: "POST",			
+			headers: {
+				'Content-Type': 'application/json'				
+			},
+			body: JSON.stringify({
+				"janus": "create",
+				"transaction": "345dfgfdg",
+				"body": payload	
+			})
+		})
+		.then(data => {			
+			console.log("Data ", data);
+		})
+
+		event.stopPropagation();
+	});
+
 	// Initialize the library (all console debuggers enabled)
 	Janus.init({debug: "all", callback: function() {
 		// Use a button to start the demo
@@ -460,10 +491,10 @@ function publishOwnFeed(useAudio) {
 	sfutest.createOffer(
 		{
 			tracks: tracks,
-			success: function(jsep) {
+			success: function(jsep) {				
 				Janus.debug("Got publisher SDP!");
 				Janus.debug(jsep);
-				let publish = { request: "configure", audio: useAudio, video: true };
+				let publish = { request: "configure", audio: useAudio, video: true, filename: "1234-" + "5678-" + Date.now().toString()};
 				// You can force a specific codec to use when publishing by using the
 				// audiocodec and videocodec properties, for instance:
 				// 		publish["audiocodec"] = "opus"

@@ -2385,7 +2385,7 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher_stream *ps
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant);
 
 /* @Treeleaf */
-gboolean upload_media_file(janus_videoroom_media type, const char* session_id, const char* room_id, const char* participant_id, const char *filename);
+gboolean upload_media_file(const char* type, const char* session_id, const char* room_id, const char* participant_id, const char *filename);
 static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
 static void anydone_delete_files(janus_videoroom_publisher *participant);
 
@@ -8870,43 +8870,57 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher_stream *ps
 	}
 }
 
+typedef struct {
+	const char* room_id;
+	const char* participant_id;
+	const char* session_id;
+	const char* media_type;
+	const char* filename;
+	struct AvRecordingMetaData* next;
+} AvRecordingMetaData;
+
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant) {
+	AvRecordingMetaData *first = NULL;
+	AvRecordingMetaData *last = NULL;
+
 	GList *temp = participant->streams;
 	while(temp) {
 		janus_videoroom_publisher_stream *ps = (janus_videoroom_publisher_stream *)temp->data;
 		if(ps->rc) {
 			janus_recorder *rc = ps->rc;
-			
-			/* @Treeleaf */
-			const int buffer_size = 32;
-			const char* session_id = g_malloc(buffer_size*sizeof(char));
-			if(ps->publisher->session->sdp_sessid){
-				sprintf(session_id, "%ld", ps->publisher->session->sdp_sessid);
-			}
 
-			const char* room_id = g_malloc(buffer_size*sizeof(char));
-			if(ps->publisher->room->room_id){
-				sprintf(room_id, "%ld", ps->publisher->room->room_id);
+			/* @Treeleaf */										
+			gchar **list = g_strsplit(participant->display, "-", 6);
+			guint len = g_strv_length(list);
+			if(len >= 2){
+				AvRecordingMetaData *temp_avrecord = g_malloc0(sizeof(AvRecordingMetaData));
+				temp_avrecord->room_id = g_strdup(participant->room_id_str);
+				temp_avrecord->participant_id = g_strdup(participant->user_id_str);
+				temp_avrecord->session_id = g_strdup(list[0]);
+				if(ps->type == JANUS_VIDEOROOM_MEDIA_VIDEO
+					&& strcmp(list[1], "screenShare") == 0){
+					temp_avrecord->media_type = g_strdup("screenshare");
+				}
+				else {
+					if(ps->type == JANUS_VIDEOROOM_MEDIA_AUDIO){
+						temp_avrecord->media_type = g_strdup("audio");
+					}
+					if(ps->type = JANUS_VIDEOROOM_MEDIA_VIDEO){
+						temp_avrecord->media_type = g_strdup("video");
+					}
+				}
+				temp_avrecord->filename = g_strjoin("/", rc->dir, rc->filename, NULL);
+				temp_avrecord->next = NULL;
+				if(first == NULL && last == NULL){
+					first = temp_avrecord;
+					last = temp_avrecord;
+				}
+				else {
+					last->next = temp_avrecord;
+					last = temp_avrecord;
+				}							
 			}
-
-			const char* participant_id = "11223";
-			gchar* filename = g_strjoin("/", rc->dir, rc->filename, NULL);
-
-			gboolean upload_flag = upload_media_file(ps->type, session_id, room_id, participant_id, filename);
-			if(upload_flag){
-				JANUS_LOG(LOG_INFO, "\nSuccessfully uploaded %s \n", filename);
-			}
-			else {
-				JANUS_LOG(LOG_INFO, "\nFailed to upload %s \n", filename);
-			}
-
-			g_free(filename);
-			g_free(session_id);
-			g_free(room_id);
-			filename = NULL;
-			session_id = NULL;
-			room_id = NULL;
-			
+			g_clear_pointer(&list, g_strfreev);
 			/* Treeleaf */
 
 			ps->rc = NULL;
@@ -8916,6 +8930,42 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 			janus_recorder_destroy(rc);
 		}
 		temp = temp->next;
+	}
+
+	/* Calling Anydone Server */
+	AvRecordingMetaData *ps = first;
+	while(ps != NULL){
+		gboolean upload_flag = upload_media_file(
+			ps->media_type,
+			ps->session_id,
+			ps->room_id,
+			ps->participant_id,
+			ps->filename
+		);
+
+		if(upload_flag){
+			JANUS_LOG(LOG_INFO, "\nSuccessfully uploaded %s \n", ps->filename);
+		}
+		else {
+			JANUS_LOG(LOG_INFO, "\nFailed to upload %s \n", ps->filename);
+		}
+
+		ps = ps->next;
+	}
+
+	/* Freeing memory */
+	ps = first;
+	while(ps != NULL){
+		g_free(ps->room_id);
+		g_free(ps->participant_id);
+		g_free(ps->session_id);
+		g_free(ps->media_type);
+		g_free(ps->filename);
+
+		AvRecordingMetaData *temp = ps;
+
+		ps = ps->next;
+		g_free(temp);
 	}
 }
 
@@ -13491,13 +13541,14 @@ static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, v
 }
 
 /* Treeleaf */
-gboolean upload_media_file(janus_videoroom_media type,
+gboolean upload_media_file( const char* type,
 							const char* session_id,
 							const char* room_id,
 							const char* participant_id,
 							const char *filename) {
 
-	if(!session_id || !room_id || !participant_id || !strlen(filename)){
+	if(session_id == NULL || room_id == NULL || participant_id==NULL || filename==NULL){
+		JANUS_LOG(LOG_ERR, "Either Session Id or Room Id or Participant Id or Filename is NULL\n");
 		return FALSE;
 	}
 
@@ -13530,21 +13581,10 @@ gboolean upload_media_file(janus_videoroom_media type,
         curl_mime_name(field, "token");
         curl_mime_data(field, anydone_auth_token, CURL_ZERO_TERMINATED);
     }
-
-	if(type == JANUS_VIDEOROOM_MEDIA_AUDIO){
-		field = curl_mime_addpart(form);
-        curl_mime_name(field, "audio");
-        curl_mime_filedata(field, filename);
-		printf("Audio filename %s \n", filename);
-	}
-	if(type == JANUS_VIDEOROOM_MEDIA_VIDEO){
-		field = curl_mime_addpart(form);
-        curl_mime_name(field, "video");
-        curl_mime_filedata(field, filename);
-		printf("Video filename %s \n", filename);
-	}
-
-	printf("Anydone upload url %s\n", anydone_upload_url);	
+	
+	field = curl_mime_addpart(form);
+	curl_mime_name(field, type);
+	curl_mime_filedata(field, filename);
 	
 	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl, CURLOPT_URL, anydone_upload_url);
@@ -13557,7 +13597,7 @@ gboolean upload_media_file(janus_videoroom_media type,
     curl_mime_free(form);
 
 	if(res != CURLE_OK){
-        JANUS_LOG(LOG_ERR, "\nUpload file to anydone failed: %s\n", curl_easy_strerror(res));
+        JANUS_LOG(LOG_ERR, "Upload file to anydone failed: %s\n", curl_easy_strerror(res));
         return FALSE;
     }
 

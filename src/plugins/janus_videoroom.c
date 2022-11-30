@@ -13529,19 +13529,19 @@ gboolean upload_media_file( const char* type,
 
 	form = curl_mime_init(curl);
 
+	struct curl_slist* headers = NULL;
+	gchar* authorization = g_strjoin("", "Authorization: ", anydone_auth_token, NULL);
+	headers = curl_slist_append(headers, "Accept: application/json");
+	headers = curl_slist_append(headers, authorization);
+	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
 	field = curl_mime_addpart(form);
 	curl_mime_name(field, "roomId");
 	curl_mime_data(field, room_id, CURL_ZERO_TERMINATED);
 
 	field = curl_mime_addpart(form);
 	curl_mime_name(field, "participantId");
-	curl_mime_data(field, participant_id, CURL_ZERO_TERMINATED);
-	
-	if(anydone_auth_token){
-        field = curl_mime_addpart(form);
-        curl_mime_name(field, "token");
-        curl_mime_data(field, anydone_auth_token, CURL_ZERO_TERMINATED);
-    }
+	curl_mime_data(field, participant_id, CURL_ZERO_TERMINATED);	
 	
 	field = curl_mime_addpart(form);
 	curl_mime_name(field, type);
@@ -13555,6 +13555,7 @@ gboolean upload_media_file( const char* type,
 	res = curl_easy_perform(curl);
 
 	/* then cleanup the form */
+	g_free(authorization);
     curl_mime_free(form);
 
 	if(res != CURLE_OK){

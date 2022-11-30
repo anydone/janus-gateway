@@ -8887,8 +8887,9 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 		janus_videoroom_publisher_stream *ps = (janus_videoroom_publisher_stream *)temp->data;
 		if(ps->rc) {
 			janus_recorder *rc = ps->rc;
+			JANUS_LOG(LOG_INFO, "\n Display %s \n", participant->display);
 
-			/* @Treeleaf */										
+			/* @Treeleaf */								
 			gchar **list = g_strsplit(participant->display, "-", 6);
 			guint len = g_strv_length(list);
 			if(len >= 2){
@@ -8903,7 +8904,7 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 					if(ps->type == JANUS_VIDEOROOM_MEDIA_AUDIO){
 						temp_avrecord->media_type = g_strdup("audio");
 					}
-					if(ps->type = JANUS_VIDEOROOM_MEDIA_VIDEO){
+					else if(ps->type = JANUS_VIDEOROOM_MEDIA_VIDEO){
 						temp_avrecord->media_type = g_strdup("video");
 					}
 				}
@@ -13513,6 +13514,8 @@ gboolean upload_media_file( const char* type,
 		JANUS_LOG(LOG_ERR, "Either Session Id or Room Id or Participant Id or Filename is NULL\n");
 		return FALSE;
 	}
+
+	JANUS_LOG(LOG_INFO, "\n Mediatype %s roomId %s participant id %s filename %s\n", type, room_id, participant_id, filename);
 
 	CURL *curl;
 	CURLcode res;

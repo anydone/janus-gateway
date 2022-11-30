@@ -5,7 +5,7 @@
 
 	// server = "https://mediaserver-mumbai-a.anydone.com/janus";
 
-	// server = "https://mediaserver.anydone.net/janus/";
+	// server = "http://192.168.1.120:8088/janus";
 
 var janus = null;
 var sfutest = null;
@@ -32,16 +32,18 @@ var subscriber_mode = (getQueryStringValue("subscriber-mode") === "yes" || getQu
 var use_msid = (getQueryStringValue("msid") === "yes" || getQueryStringValue("msid") === "true");
 
 var record = false;
+var sessionId = "";
+var pluginId = "";
 
 $(document).ready(function() {
 	document.getElementById("record").addEventListener('click', (event)=>{
-		console.log("Button clicked ", event);
-		const url = "http://localhost:8088/janus";
+		console.log("Record Button clicked ", event);
+		const url = `http://localhost:8088/janus/${sessionId}/${pluginId}`;
 		record = !record;
 
 		const payload = {
 			"request":"enable_recording",				
-			"room": "1234",
+			"room": myroom,
 			"record": record
 		};
 
@@ -51,17 +53,52 @@ $(document).ready(function() {
 				'Content-Type': 'application/json'				
 			},
 			body: JSON.stringify({
-				"janus": "create",
+				"janus": "message",
 				"transaction": "345dfgfdg",
 				"body": payload	
 			})
 		})
-		.then(data => {			
-			console.log("Data ", data);
+		.then(response => response.json())
+		.then(data => {
+			console.log("record ", data);
 		})
-
 		event.stopPropagation();
+		event.preventDefault();		
 	});
+
+	document.getElementById("createroom").addEventListener("click", (event)=>{
+		if(!sessionId || !pluginId){
+			alert("No session or plugin id ");
+			return;
+		}
+		console.log("Crete room Button clicked ", event);
+		const url = `http://localhost:8088/janus/${sessionId}/${pluginId}`;
+
+		fetch(url, {
+			method: "POST",
+			headers: {
+				'Content-Type': 'application/json'				
+			},
+			body: JSON.stringify({
+				janus: 'message',
+				plugin: 'janus.plugin.videoroom',
+				transaction: Janus.randomString(10),
+				body: {
+					request: 'create',					
+					is_private: true,
+					publishers: 50,
+					record: true,					
+				}
+			})
+		})
+		.then(response => response.json())
+		.then(data => {
+			console.log("create room data ", data);
+			myroom = data.plugindata.data.room;
+			console.log("room id ", myroom);
+		})		
+	});
+
 
 	// Initialize the library (all console debuggers enabled)
 	Janus.init({debug: "all", callback: function() {
@@ -88,9 +125,13 @@ $(document).ready(function() {
 							{
 								plugin: "janus.plugin.videoroom",
 								opaqueId: opaqueId,
-								success: function(pluginHandle) {
+								success: function(pluginHandle) {														
 									$('#details').remove();
 									sfutest = pluginHandle;
+									
+									sessionId = sfutest.session.getSessionId();
+									pluginId = pluginHandle.getId();
+
 									Janus.log("Plugin attached! (" + sfutest.getPlugin() + ", id=" + sfutest.getId() + ")");
 									Janus.log("  -- This is a publisher/manager");
 									// Prepare the username registration
@@ -457,21 +498,22 @@ function registerUsername() {
 			$('#register').removeAttr('disabled').click(registerUsername);
 			return;
 		}
-		if(/[^a-zA-Z0-9]/.test(username)) {
-			$('#you')
-				.removeClass().addClass('label label-warning')
-				.html('Input is not alphanumeric');
-			$('#username').removeAttr('disabled').val("");
-			$('#register').removeAttr('disabled').click(registerUsername);
-			return;
-		}
+		// if(/[^a-zA-Z0-9]/.test(username)) {
+		// 	$('#you')
+		// 		.removeClass().addClass('label label-warning')
+		// 		.html('Input is not alphanumeric');
+		// 	$('#username').removeAttr('disabled').val("");
+		// 	$('#register').removeAttr('disabled').click(registerUsername);
+		// 	return;
+		// }
 		let register = {
 			request: "join",
 			room: myroom,
 			ptype: "publisher",
 			display: username
 		};
-		myusername = escapeXmlTags(username);
+		// myusername = escapeXmlTags(username);
+		myusername = username;
 		sfutest.send({ message: register });
 	}
 }
@@ -491,10 +533,11 @@ function publishOwnFeed(useAudio) {
 	sfutest.createOffer(
 		{
 			tracks: tracks,
-			success: function(jsep) {				
+			success: function(jsep) {
 				Janus.debug("Got publisher SDP!");
 				Janus.debug(jsep);
-				let publish = { request: "configure", audio: useAudio, video: true, filename: "1234-" + "5678-" + Date.now().toString()};
+				let publish = { request: "configure", audio: useAudio, video: true};
+				// filename: "1234-" + "5678-" + Date.now().toString()
 				// You can force a specific codec to use when publishing by using the
 				// audiocodec and videocodec properties, for instance:
 				// 		publish["audiocodec"] = "opus"

@@ -2385,9 +2385,8 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher_stream *ps
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant);
 
 /* @Treeleaf */
-gboolean upload_media_file(const char* type, const char* session_id, const char* room_id, const char* participant_id, const char *filename);
-static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp);
-static void anydone_delete_files(janus_videoroom_publisher *participant);
+gboolean upload_media_file(const char* type, const char* room_id, const char* participant_id, const char *filename);
+static void anydone_delete_file(const char* filename);
 
 /* Freeing stuff */
 static void janus_videoroom_subscriber_stream_destroy(janus_videoroom_subscriber_stream *s) {
@@ -3595,6 +3594,7 @@ int janus_videoroom_init(janus_callbacks *callback, const char *config_path) {
         janus_config_item *recording_path_obj = janus_config_get(config, config_general, janus_config_type_item, "rec_dir");
         if(recording_path_obj && recording_path_obj->value)
             recording_path = recording_path_obj->value;
+				
         /* @Treeleaf */
 	}
 	rooms = g_hash_table_new_full(string_ids ? g_str_hash : g_int64_hash, string_ids ? g_str_equal : g_int64_equal,
@@ -8872,8 +8872,7 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher_stream *ps
 
 typedef struct {
 	const char* room_id;
-	const char* participant_id;
-	const char* session_id;
+	const char* participant_id;	
 	const char* media_type;
 	const char* filename;
 	struct AvRecordingMetaData* next;
@@ -8895,8 +8894,7 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 			if(len >= 2){
 				AvRecordingMetaData *temp_avrecord = g_malloc0(sizeof(AvRecordingMetaData));
 				temp_avrecord->room_id = g_strdup(participant->room_id_str);
-				temp_avrecord->participant_id = g_strdup(participant->user_id_str);
-				temp_avrecord->session_id = g_strdup(list[0]);
+				temp_avrecord->participant_id = g_strdup(list[0]);				
 				if(ps->type == JANUS_VIDEOROOM_MEDIA_VIDEO
 					&& strcmp(list[1], "screenShare") == 0){
 					temp_avrecord->media_type = g_strdup("screenshare");
@@ -8936,8 +8934,7 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 	AvRecordingMetaData *ps = first;
 	while(ps != NULL){
 		gboolean upload_flag = upload_media_file(
-			ps->media_type,
-			ps->session_id,
+			ps->media_type,			
 			ps->room_id,
 			ps->participant_id,
 			ps->filename
@@ -8945,6 +8942,7 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 
 		if(upload_flag){
 			JANUS_LOG(LOG_INFO, "\nSuccessfully uploaded %s \n", ps->filename);
+			// anydone_delete_file(ps->filename);
 		}
 		else {
 			JANUS_LOG(LOG_INFO, "\nFailed to upload %s \n", ps->filename);
@@ -8958,7 +8956,6 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 	while(ps != NULL){
 		g_free(ps->room_id);
 		g_free(ps->participant_id);
-		g_free(ps->session_id);
 		g_free(ps->media_type);
 		g_free(ps->filename);
 
@@ -13496,58 +13493,23 @@ static void *janus_videoroom_remote_publisher_thread(void *user_data) {
 
 /**
  * @Treeleaf
- * @param participant
+ * @param filename
  */
-// static void anydone_delete_files(janus_videoroom_publisher *participant){
-//     if(participant->room){
-//         if(participant->room->rec_dir){
-//             char audio_file[256];
-//             strcpy(audio_file, participant->room->rec_dir);
-//             strcat(audio_file, "/");
-//             if(participant->arc->filename){
-//                 strcat(audio_file, participant->arc->filename);
-//             }
-//             if(remove(audio_file) == 0)
-//                 JANUS_LOG(LOG_INFO, "\nSuccessfully deleted file %s\n", audio_file);
-//             else
-//                 JANUS_LOG(LOG_INFO, "\nCouldn't delete file %s\n", audio_file);
-//         }
-//     }
-// }
-
-/**
- * @Treeleaf
- * @param contents
- * @param size
- * @param nmemb
- * @param userp
- * @return
- */
-static size_t anydone_http_callback(void *contents, size_t size, size_t nmemb, void *userp){
-    size_t real_size = size * nmemb;
-    anydone_http_response *mem = (anydone_http_response *)userp;
-    mem->memory = realloc(mem->memory, mem->size + real_size + 1);
-
-    if(mem->memory == NULL) {
-        JANUS_LOG(LOG_ERR, "Not enough memory for to upload file.\n");
-        return 0;
-    }
-
-    memcpy(&(mem->memory[mem->size]), contents, real_size);
-    mem->size += real_size;
-    mem->memory[mem->size] = 0;
-
-    return real_size;
+static void anydone_delete_file(const char* filename){	
+	if(remove(filename) == 0)
+		JANUS_LOG(LOG_INFO, "\nSuccessfully deleted file %s\n", filename);
+	else
+		JANUS_LOG(LOG_INFO, "\nCouldn't delete file %s\n", filename);	
 }
 
+
 /* Treeleaf */
-gboolean upload_media_file( const char* type,
-							const char* session_id,
+gboolean upload_media_file( const char* type,							
 							const char* room_id,
 							const char* participant_id,
 							const char *filename) {
 
-	if(session_id == NULL || room_id == NULL || participant_id==NULL || filename==NULL){
+	if(room_id == NULL || participant_id==NULL || filename==NULL){
 		JANUS_LOG(LOG_ERR, "Either Session Id or Room Id or Participant Id or Filename is NULL\n");
 		return FALSE;
 	}
@@ -13563,10 +13525,6 @@ gboolean upload_media_file( const char* type,
 	}
 
 	form = curl_mime_init(curl);
-
-	field = curl_mime_addpart(form);
-	curl_mime_name(field, "sessionId");
-	curl_mime_data(field, session_id, CURL_ZERO_TERMINATED);
 
 	field = curl_mime_addpart(form);
 	curl_mime_name(field, "roomId");

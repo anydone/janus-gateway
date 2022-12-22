@@ -1524,6 +1524,7 @@ room-<unique room ID>: {
 /* @Treeleaf */
 #include <curl/curl.h>
 #include <string.h>
+#include <sys/stat.h>
 
 /* @Treeleaf */
 /* Structure to hold the response after http call is resolved */
@@ -2387,6 +2388,7 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 /* @Treeleaf */
 gboolean upload_media_file(const char* type, const char* room_id, const char* participant_id, const char *filename);
 static void anydone_delete_file(const char* filename);
+static long long get_file_size(const char* filename);
 
 /* Freeing stuff */
 static void janus_videoroom_subscriber_stream_destroy(janus_videoroom_subscriber_stream *s) {
@@ -8878,6 +8880,14 @@ typedef struct {
 	struct AvRecordingMetaData* next;
 } AvRecordingMetaData;
 
+static long long get_file_size(const char* filename){
+	struct stat st;
+	if(stat(filename, &st) == 0){
+		return st.st_size;
+	}
+	return -1;
+}
+
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant) {
 	AvRecordingMetaData *first = NULL;
 	AvRecordingMetaData *last = NULL;
@@ -8934,19 +8944,25 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 	/* Calling Anydone Server */
 	AvRecordingMetaData *ps = first;
 	while(ps != NULL){
-		gboolean upload_flag = upload_media_file(
-			ps->media_type,			
-			ps->room_id,
-			ps->participant_id,
-			ps->filename
-		);
+		long long MIN_FILE_SIZE = 100; // 100 bytes
+		long long file_size = get_file_size(ps->filename);
 
-		if(upload_flag){
-			JANUS_LOG(LOG_INFO, "\nSuccessfully uploaded %s \n", ps->filename);
-			// anydone_delete_file(ps->filename);
-		}
-		else {
-			JANUS_LOG(LOG_INFO, "\nFailed to upload %s \n", ps->filename);
+		/* Negelate some files that only contains headers */
+		if(file_size > MIN_FILE_SIZE){
+			gboolean upload_flag = upload_media_file(
+				ps->media_type,			
+				ps->room_id,
+				ps->participant_id,
+				ps->filename
+			);
+
+			if(upload_flag){
+				JANUS_LOG(LOG_INFO, "\nSuccessfully uploaded %s \n", ps->filename);
+				// anydone_delete_file(ps->filename);
+			}
+			else {
+				JANUS_LOG(LOG_INFO, "\nFailed to upload %s \n", ps->filename);
+			}
 		}
 
 		ps = ps->next;

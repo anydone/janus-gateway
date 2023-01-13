@@ -1521,17 +1521,6 @@ room-<unique room ID>: {
 #include <sys/socket.h>
 #include <poll.h>
 
-/* @Treeleaf */
-#include <curl/curl.h>
-#include <string.h>
-#include <sys/stat.h>
-
-/* @Treeleaf */
-/* Structure to hold the response after http call is resolved */
-typedef struct anydone_http_response {
-    char *memory;
-    size_t size;
-} anydone_http_response;
 
 /* Plugin information */
 #define JANUS_VIDEOROOM_VERSION			9
@@ -1941,12 +1930,6 @@ static struct janus_json_parameter remote_publisher_stream_parameters[] = {
 static janus_config *config = NULL;
 static const char *config_folder = NULL;
 static janus_mutex config_mutex = JANUS_MUTEX_INITIALIZER;
-
-/* @Treeleaf */
-static const char *anydone_upload_url = NULL;
-static const char *anydone_auth_token = NULL;
-static const char *recording_path = NULL;
-/* @Treeleaf */
 
 /* Useful stuff */
 static volatile gint initialized = 0, stopping = 0;
@@ -2384,11 +2367,6 @@ static void janus_videoroom_remote_recipient_free(janus_videoroom_remote_recipie
 /* Start / stop recording */
 static void janus_videoroom_recorder_create(janus_videoroom_publisher_stream *ps);
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant);
-
-/* @Treeleaf */
-gboolean upload_media_file(const char* type, const char* room_id, const char* participant_id, const char *filename);
-static void anydone_delete_file(const char* filename);
-static long long get_file_size(const char* filename);
 
 /* Freeing stuff */
 static void janus_videoroom_subscriber_stream_destroy(janus_videoroom_subscriber_stream *s) {
@@ -3583,21 +3561,6 @@ int janus_videoroom_init(janus_callbacks *callback, const char *config_path) {
 		if(string_ids) {
 			JANUS_LOG(LOG_INFO, "VideoRoom will use alphanumeric IDs, not numeric\n");
 		}
-
-		/* @Treeleaf */
-		janus_config_item *anydone_upload_url_obj = janus_config_get(config, config_general, janus_config_type_item, "anydone_upload_url");
-		if(anydone_upload_url_obj && anydone_upload_url_obj->value)
-            anydone_upload_url = anydone_upload_url_obj->value;
-
-        janus_config_item *anydone_auth_token_obj = janus_config_get(config, config_general, janus_config_type_item, "anydone_auth_token");
-        if(anydone_auth_token_obj && anydone_auth_token_obj->value)
-            anydone_auth_token = anydone_auth_token_obj->value;
-
-        janus_config_item *recording_path_obj = janus_config_get(config, config_general, janus_config_type_item, "rec_dir");
-        if(recording_path_obj && recording_path_obj->value)
-            recording_path = recording_path_obj->value;
-				
-        /* @Treeleaf */
 	}
 	rooms = g_hash_table_new_full(string_ids ? g_str_hash : g_int64_hash, string_ids ? g_str_equal : g_int64_equal,
 		(GDestroyNotify)g_free, (GDestroyNotify)janus_videoroom_room_destroy);
@@ -8872,66 +8835,12 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher_stream *ps
 	}
 }
 
-typedef struct {
-	const char* room_id;
-	const char* participant_id;	
-	const char* media_type;
-	const char* filename;
-	struct AvRecordingMetaData* next;
-} AvRecordingMetaData;
-
-static long long get_file_size(const char* filename){
-	struct stat st;
-	if(stat(filename, &st) == 0){
-		return st.st_size;
-	}
-	return -1;
-}
-
 static void janus_videoroom_recorder_close(janus_videoroom_publisher *participant) {
-	AvRecordingMetaData *first = NULL;
-	AvRecordingMetaData *last = NULL;
-
 	GList *temp = participant->streams;
 	while(temp) {
 		janus_videoroom_publisher_stream *ps = (janus_videoroom_publisher_stream *)temp->data;
 		if(ps->rc) {
 			janus_recorder *rc = ps->rc;
-			JANUS_LOG(LOG_INFO, "\n Display %s \n", participant->display);
-
-			/* @Treeleaf */								
-			gchar **list = g_strsplit(participant->display, "-", 6);
-			guint len = g_strv_length(list);
-			if(len >= 2){
-				AvRecordingMetaData *temp_avrecord = g_malloc0(sizeof(AvRecordingMetaData));
-				temp_avrecord->room_id = g_strdup(participant->room_id_str);
-				temp_avrecord->participant_id = g_strdup(list[0]);				
-				if(ps->type == JANUS_VIDEOROOM_MEDIA_VIDEO
-					&& strcmp(list[1], "screenShare") == 0){
-					temp_avrecord->media_type = g_strdup("screenshare");
-				}
-				else {
-					if(ps->type == JANUS_VIDEOROOM_MEDIA_AUDIO){
-						temp_avrecord->media_type = g_strdup("audio");
-					}
-					else if(ps->type = JANUS_VIDEOROOM_MEDIA_VIDEO){
-						temp_avrecord->media_type = g_strdup("video");
-					}
-				}
-				temp_avrecord->filename = g_strjoin("/", rc->dir, rc->filename, NULL);
-				temp_avrecord->next = NULL;
-				if(first == NULL && last == NULL){
-					first = temp_avrecord;
-					last = temp_avrecord;
-				}
-				else {
-					last->next = temp_avrecord;
-					last = temp_avrecord;
-				}							
-			}
-			g_clear_pointer(&list, g_strfreev);
-			/* Treeleaf */
-
 			ps->rc = NULL;
 			janus_recorder_close(rc);
 			JANUS_LOG(LOG_INFO, "Closed %s recording %s\n", janus_videoroom_media_str(ps->type),
@@ -8939,47 +8848,6 @@ static void janus_videoroom_recorder_close(janus_videoroom_publisher *participan
 			janus_recorder_destroy(rc);
 		}
 		temp = temp->next;
-	}
-
-	/* Calling Anydone Server */
-	AvRecordingMetaData *ps = first;
-	while(ps != NULL){
-		long long MIN_FILE_SIZE = 100; // 100 bytes
-		long long file_size = get_file_size(ps->filename);
-
-		/* Negelate some files that only contains headers */
-		if(file_size > MIN_FILE_SIZE){
-			gboolean upload_flag = upload_media_file(
-				ps->media_type,			
-				ps->room_id,
-				ps->participant_id,
-				ps->filename
-			);
-
-			if(upload_flag){
-				JANUS_LOG(LOG_INFO, "\nSuccessfully uploaded %s \n", ps->filename);
-				// anydone_delete_file(ps->filename);
-			}
-			else {
-				JANUS_LOG(LOG_INFO, "\nFailed to upload %s \n", ps->filename);
-			}
-		}
-
-		ps = ps->next;
-	}
-
-	/* Freeing memory */
-	ps = first;
-	while(ps != NULL){
-		g_free(ps->room_id);
-		g_free(ps->participant_id);
-		g_free(ps->media_type);
-		g_free(ps->filename);
-
-		AvRecordingMetaData *temp = ps;
-
-		ps = ps->next;
-		g_free(temp);
 	}
 }
 
@@ -13505,81 +13373,4 @@ static void *janus_videoroom_remote_publisher_thread(void *user_data) {
 	janus_refcount_decrease(&publisher->ref);
 	g_thread_unref(g_thread_self());
 	return NULL;
-}
-
-
-/**
- * @Treeleaf
- * @param filename
- */
-static void anydone_delete_file(const char* filename){	
-	if(remove(filename) == 0)
-		JANUS_LOG(LOG_INFO, "\nSuccessfully deleted file %s\n", filename);
-	else
-		JANUS_LOG(LOG_INFO, "\nCouldn't delete file %s\n", filename);	
-}
-
-
-/* Treeleaf */
-gboolean upload_media_file( const char* type,							
-							const char* room_id,
-							const char* participant_id,
-							const char *filename) {
-
-	if(room_id == NULL || participant_id==NULL || filename==NULL){
-		JANUS_LOG(LOG_ERR, "Either Session Id or Room Id or Participant Id or Filename is NULL\n");
-		return FALSE;
-	}
-
-	JANUS_LOG(LOG_INFO, "\n Mediatype %s roomId %s participant id %s filename %s\n", type, room_id, participant_id, filename);
-
-	CURL *curl;
-	CURLcode res;
-	curl_mime *form = NULL;
-	curl_mimepart *field = NULL;
-
-	curl = curl_easy_init();
-	if(!curl){
-		return CURLE_FAILED_INIT;
-	}
-
-	form = curl_mime_init(curl);
-
-	struct curl_slist* headers = NULL;
-	gchar* authorization = g_strjoin("", "Authorization: ", anydone_auth_token, NULL);
-	headers = curl_slist_append(headers, "Accept: application/json");
-	headers = curl_slist_append(headers, authorization);
-	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-	field = curl_mime_addpart(form);
-	curl_mime_name(field, "roomId");
-	curl_mime_data(field, room_id, CURL_ZERO_TERMINATED);
-
-	field = curl_mime_addpart(form);
-	curl_mime_name(field, "participantId");
-	curl_mime_data(field, participant_id, CURL_ZERO_TERMINATED);	
-	
-	field = curl_mime_addpart(form);
-	curl_mime_name(field, type);
-	curl_mime_filedata(field, filename);
-	
-	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
-    curl_easy_setopt(curl, CURLOPT_URL, anydone_upload_url);
-    curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
-    
-	res = curl_easy_perform(curl);
-
-	/* then cleanup the form */
-	g_free(authorization);
-    curl_mime_free(form);
-
-	if(res != CURLE_OK){
-        JANUS_LOG(LOG_ERR, "Upload file to anydone failed: %s\n", curl_easy_strerror(res));
-        return FALSE;
-    }
-
-	long http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    return (http_code == 200)? TRUE: FALSE;
 }

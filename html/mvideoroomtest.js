@@ -6,6 +6,9 @@
 	// server = "https://mediaserver-mumbai-a.anydone.com/janus";
 
 	// server = "http://192.168.1.120:8088/janus";
+	
+server = "https://mediaserver.anydone.net/janus";
+	
 
 var janus = null;
 var sfutest = null;
@@ -38,13 +41,13 @@ var pluginId = "";
 $(document).ready(function() {
 	document.getElementById("record").addEventListener('click', (event)=>{
 		console.log("Record Button clicked ", event);
-		const url = `http://localhost:8088/janus/${sessionId}/${pluginId}`;
+		const url = `${server}/${sessionId}/${pluginId}`;
 		record = !record;
 
 		const payload = {
 			"request":"enable_recording",				
 			"room": myroom,
-			"record": record
+			"record": record			
 		};
 
 		fetch(url, {
@@ -67,36 +70,52 @@ $(document).ready(function() {
 	});
 
 	document.getElementById("createroom").addEventListener("click", (event)=>{
-		if(!sessionId || !pluginId){
-			alert("No session or plugin id ");
-			return;
-		}
-		console.log("Crete room Button clicked ", event);
-		const url = `http://localhost:8088/janus/${sessionId}/${pluginId}`;
+		var newSessionId, newPluginId;
+		const newJanus = new Janus({
+			server: server,
+			iceServers: iceServers,
+			success: function() {
+				newJanus.attach(
+					{
+						plugin: "janus.plugin.videoroom",
+						opaqueId: opaqueId,
+						success: function(pluginHandle) {														
+							$('#details').remove();
+							const newsfutest = pluginHandle;
+							newSessionId = newsfutest.session.getSessionId();
+							newPluginId = pluginHandle.getId();
 
-		fetch(url, {
-			method: "POST",
-			headers: {
-				'Content-Type': 'application/json'				
-			},
-			body: JSON.stringify({
-				janus: 'message',
-				plugin: 'janus.plugin.videoroom',
-				transaction: Janus.randomString(10),
-				body: {
-					request: 'create',					
-					is_private: true,
-					publishers: 50,
-					record: true,					
-				}
-			})
-		})
-		.then(response => response.json())
-		.then(data => {
-			console.log("create room data ", data);
-			myroom = data.plugindata.data.room;
-			console.log("room id ", myroom);
-		})		
+							const url = `${server}/${newSessionId}/${newPluginId}`;
+
+							fetch(url, {
+								method: "POST",
+								headers: {
+									'Content-Type': 'application/json'				
+								},
+								body: JSON.stringify({
+									janus: 'message',
+									plugin: 'janus.plugin.videoroom',
+									transaction: Janus.randomString(10),
+									body: {
+										request: 'create',					
+										is_private: true,
+										publishers: 50,
+										rec_dir: "/opt/janus/share/janus/recordings",
+										record: false,
+										pin: "1234",				
+									}
+								})
+							})
+							.then(response => response.json())
+							.then(data => {
+								console.log("create room data ", data);
+								myroom = data.plugindata.data.room;
+								console.log("room id ", myroom);
+							})		
+						}
+					});
+			}
+		});		
 	});
 
 
@@ -509,8 +528,9 @@ function registerUsername() {
 		let register = {
 			request: "join",
 			room: myroom,
+			pin: "1234",
 			ptype: "publisher",
-			display: username
+			display: username,
 		};
 		// myusername = escapeXmlTags(username);
 		myusername = username;
@@ -727,6 +747,7 @@ function subscribeTo(sources) {
 				let subscribe = {
 					request: "join",
 					room: myroom,
+					pin: "1234",
 					ptype: "subscriber",
 					streams: subscription,
 					use_msid: use_msid,
@@ -809,7 +830,7 @@ function subscribeTo(sources) {
 							success: function(jsep) {
 								Janus.debug("Got SDP!");
 								Janus.debug(jsep);
-								let body = { request: "start", room: myroom };
+								let body = { request: "start", room: myroom, pin: "1234" };
 								remoteFeed.send({ message: body, jsep: jsep });
 							},
 							error: function(error) {

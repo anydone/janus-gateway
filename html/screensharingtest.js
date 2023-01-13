@@ -334,7 +334,7 @@ function checkEnterShare(field, event) {
 
 function preShareScreen() {
 	if(!Janus.isExtensionEnabled()) {
-		bootbox.alert("You're using Chrome but don't have the screensharing extension installed: click <b><a href='https://chrome.google.com/webstore/detail/janus-webrtc-screensharin/hapfgfdkleiggjjpfpenajgdnfckjpaj' target='_blank'>here</a></b> to do so", function() {
+		bootbox.alert("This browser doesn't support screensharing (getDisplayMedia unavailable)", function() {
 			window.location.reload();
 		});
 		return;
@@ -367,6 +367,10 @@ function shareScreen() {
 		publishers: 1
 	};
 	screentest.send({ message: create, success: function(result) {
+		if(result["error"]) {
+			bootbox.alert("Couldn't create room: " + result["error"]);
+			return;
+		}
 		var event = result["videoroom"];
 		Janus.debug("Event: " + event);
 		if(event) {

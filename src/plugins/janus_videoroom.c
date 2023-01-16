@@ -8813,9 +8813,10 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher_stream *ps
 			}
 		} else {
 			/* Build a filename */
-			g_snprintf(filename, 255, "videoroom-%s-user-%s-%"SCNi64"-%s-%d",
-				participant->room_id_str, participant->user_id_str, now,
-				janus_videoroom_media_str(ps->type), ps->mindex);
+	/* Treeleaf */
+            g_snprintf(filename, 255, "videoroom-%s-user-%s-%s-%"SCNi64"-%s-%d",
+            participant->room_id_str, participant->user_id_str,participant->display, now,
+            janus_videoroom_media_str(ps->type), ps->mindex);
 			rc = janus_recorder_create_full(participant->room->rec_dir, type, ps->fmtp, filename);
 			if(rc == NULL) {
 				JANUS_LOG(LOG_ERR, "Couldn't open an %s recording file for this publisher!\n",

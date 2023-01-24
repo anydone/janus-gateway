@@ -28,8 +28,6 @@
 
 #include <jansson.h>
 
-#include <curl/curl.h>  // @Treeleaf
-
 #include "mutex.h"
 #include "ice.h"
 #include "refcount.h"
@@ -297,35 +295,5 @@ gint janus_is_stopping(void);
  * NEVER use it otherwise (it would simply not work with regular WebRTC endpoints).
  * @returns TRUE if WebRTC encryption is enabled (the default), and FALSE otherwise */
 gboolean janus_is_webrtc_encryption_enabled(void);
-
-
-///////////////// @Treeleaf /////////////////////////////////////////////////////////////////
-/**
- * Structure to hold the response after http call is resolved.
- */
-typedef struct MemoryStruct {
-    char *memory;
-    size_t size;
-} MemoryStruct;
-
-/**
- * method to call http request to provided url and provided data.
- */
-MemoryStruct* call_request(CURL *curl, const char *url, char *user_data);
-
-/**
- * Parse text into a JSON object. If text is valid JSON, returns a
- * json_t structure, otherwise prints and error and returns null.
- */
-json_t *load_json(const char *text);
-
-/**
- * perform http request to given url and provided data.
- * and returns TRUE for success and FALSE for failure.
- */
-gboolean authenticate(const char *url, const char *user_data);
-
-///////////////// @Treeleaf /////////////////////////////////////////////////////////////////
-
 
 #endif

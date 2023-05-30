@@ -6,9 +6,9 @@
 	// server = "https://mediaserver-mumbai-a.anydone.com/janus";
 
 	// server = "http://192.168.1.120:8088/janus";
-	
-server = "https://mediaserver.anydone.net/janus";
-	
+
+// server = "https://mediaserver.anydone.net/janus";
+
 
 var janus = null;
 var sfutest = null;
@@ -45,20 +45,20 @@ $(document).ready(function() {
 		record = !record;
 
 		const payload = {
-			"request":"enable_recording",				
+			"request":"enable_recording",
 			"room": myroom,
-			"record": record			
+			"record": record
 		};
 
 		fetch(url, {
-			method: "POST",			
+			method: "POST",
 			headers: {
-				'Content-Type': 'application/json'				
+				'Content-Type': 'application/json'
 			},
 			body: JSON.stringify({
 				"janus": "message",
 				"transaction": "345dfgfdg",
-				"body": payload	
+				"body": payload
 			})
 		})
 		.then(response => response.json())
@@ -66,7 +66,7 @@ $(document).ready(function() {
 			console.log("record ", data);
 		})
 		event.stopPropagation();
-		event.preventDefault();		
+		event.preventDefault();
 	});
 
 	document.getElementById("createroom").addEventListener("click", (event)=>{
@@ -79,7 +79,7 @@ $(document).ready(function() {
 					{
 						plugin: "janus.plugin.videoroom",
 						opaqueId: opaqueId,
-						success: function(pluginHandle) {														
+						success: function(pluginHandle) {
 							$('#details').remove();
 							const newsfutest = pluginHandle;
 							newSessionId = newsfutest.session.getSessionId();
@@ -90,19 +90,19 @@ $(document).ready(function() {
 							fetch(url, {
 								method: "POST",
 								headers: {
-									'Content-Type': 'application/json'				
+									'Content-Type': 'application/json'
 								},
 								body: JSON.stringify({
 									janus: 'message',
 									plugin: 'janus.plugin.videoroom',
 									transaction: Janus.randomString(10),
 									body: {
-										request: 'create',					
+										request: 'create',
 										is_private: true,
 										publishers: 50,
 										rec_dir: "/opt/janus/share/janus/recordings",
 										record: false,
-										pin: "1234",				
+										pin: "1234",
 									}
 								})
 							})
@@ -111,11 +111,11 @@ $(document).ready(function() {
 								console.log("create room data ", data);
 								myroom = data.plugindata.data.room;
 								console.log("room id ", myroom);
-							})		
+							})
 						}
 					});
 			}
-		});		
+		});
 	});
 
 
@@ -144,10 +144,10 @@ $(document).ready(function() {
 							{
 								plugin: "janus.plugin.videoroom",
 								opaqueId: opaqueId,
-								success: function(pluginHandle) {														
+								success: function(pluginHandle) {
 									$('#details').remove();
 									sfutest = pluginHandle;
-									
+
 									sessionId = sfutest.session.getSessionId();
 									pluginId = pluginHandle.getId();
 
@@ -546,13 +546,24 @@ function publishOwnFeed(useAudio) {
 	// too if you want to publish via datachannels as well)
 	let tracks = [];
 	if(useAudio)
-		tracks.push({ type: 'audio', capture: true, recv: false });
-	tracks.push({ type: 'video', capture: true, recv: false, simulcast: doSimulcast });
+		tracks.push({ type: 'audio', capture: true, recv: false,
+			transforms: { sender: senderTransforms['audio'], receiver: receiverTransforms['audio']}
+		});
+
+	tracks.push({ type: 'video', capture: true, recv: false, simulcast: doSimulcast,
+		transforms: { sender: senderTransforms['video'], receiver: receiverTransforms['video']}
+	});
 	//~ tracks.push({ type: 'data' });
 
 	sfutest.createOffer(
 		{
-			tracks: tracks,
+			tracks: [
+				{ type: 'audio', capture: true, recv: true,
+					transforms: { sender: senderTransforms['audio'], receiver: receiverTransforms['audio']} },
+				{ type: 'video', capture: true, recv: true, simulcast: doSimulcast,
+					transforms: { sender: senderTransforms['video'], receiver: receiverTransforms['video']} },
+				{ type: 'data' },
+			],
 			success: function(jsep) {
 				Janus.debug("Got publisher SDP!");
 				Janus.debug(jsep);
@@ -825,7 +836,11 @@ function subscribeTo(sources) {
 							// don't mention audio or video tracks, we autoaccept them
 							// as recvonly (since we won't capture anything ourselves)
 							tracks: [
-								{ type: 'data' }
+								{ type: 'audio',
+									transforms: { sender: senderTransforms['audio'], receiver: receiverTransforms['audio']} },
+								{ type: 'video',
+									transforms: { sender: senderTransforms['video'], receiver: receiverTransforms['video']} },
+								{ type: 'data' },
 							],
 							success: function(jsep) {
 								Janus.debug("Got SDP!");
@@ -1119,4 +1134,76 @@ function updateSimulcastButtons(feed, substream, temporal) {
 		$('#tl' + index + '-1').removeClass('btn-primary btn-success').addClass('btn-primary');
 		$('#tl' + index + '-0').removeClass('btn-primary btn-success').addClass('btn-primary');
 	}
+}
+
+var currentCryptoKey = 'mysecret';
+var currentKeyIdentifier = 1;
+
+/* end to end encryption */
+var senderTransforms = {}, receiverTransforms = {};
+for(var m of ["audio", "video"]) {
+	senderTransforms[m] = new TransformStream({
+		start() {
+			// Called on startup.
+			console.log("[Sender transform)] Startup");
+		},
+		transform(chunk, controller) {
+			// Copy of the above mentioned demo's encodeFunction()
+			const view = new DataView(chunk.data);
+			const newData = new ArrayBuffer(chunk.data.byteLength + 5);
+			const newView = new DataView(newData);
+			for(let i=0; i<10; ++i) {
+				newView.setInt8(i, view.getInt8(i));
+			}
+			// This is a bitwise xor of the key with the payload. This is not strong encryption, just a demo.
+			for(let i=10; i<chunk.data.byteLength; ++i) {
+				const keyByte = currentCryptoKey.charCodeAt(i % currentCryptoKey.length);
+				newView.setInt8(i, view.getInt8(i) ^ keyByte);
+			}
+			newView.setUint8(chunk.data.byteLength, currentKeyIdentifier % 0xff);
+			newView.setUint32(chunk.data.byteLength + 1, 0xDEADBEEF);
+			chunk.data = newData;
+			controller.enqueue(chunk);
+		},
+		flush() {
+			// Called when the stream is about to be closed
+			console.log("[Sender transform] Closing");
+		}
+	});
+	receiverTransforms[m] = new TransformStream({
+		start() {
+			// Called on startup.
+			console.log("[Receiver transform] Startup");
+		},
+		transform(chunk, controller) {
+			// Copy of the above mentioned demo's decodeFunction()
+			const view = new DataView(chunk.data);
+			const checksum = view.getUint32(chunk.data.byteLength - 4);
+			if(checksum !== 0xDEADBEEF) {
+				console.log('Corrupted frame received');
+				console.log(checksum.toString(16));
+				return;
+			}
+			const keyIdentifier = view.getUint8(chunk.data.byteLength - 5);
+			if(keyIdentifier !== currentKeyIdentifier) {
+				console.log(`Key identifier mismatch, got ${keyIdentifier} expected ${currentKeyIdentifier}.`);
+				return;
+			}
+			const newData = new ArrayBuffer(chunk.data.byteLength - 5);
+			const newView = new DataView(newData);
+			for(let i=0; i<10; ++i) {
+				newView.setInt8(i, view.getInt8(i));
+			}
+			for(let i=10; i<chunk.data.byteLength - 5; ++i) {
+				const keyByte = currentCryptoKey.charCodeAt(i % currentCryptoKey.length);
+				newView.setInt8(i, view.getInt8(i) ^ keyByte);
+			}
+			chunk.data = newData;
+			controller.enqueue(chunk);
+		},
+		flush() {
+			// Called when the stream is about to be closed
+			console.log("[Receiver transform] Closing");
+		}
+	});
 }

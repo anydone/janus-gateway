@@ -836,10 +836,10 @@ function subscribeTo(sources) {
 							// don't mention audio or video tracks, we autoaccept them
 							// as recvonly (since we won't capture anything ourselves)
 							tracks: [
-								{ type: 'audio',
-									transforms: { sender: senderTransforms['audio'], receiver: receiverTransforms['audio']} },
-								{ type: 'video',
-									transforms: { sender: senderTransforms['video'], receiver: receiverTransforms['video']} },
+								// { type: 'audio',
+								// 	transforms: { sender: senderTransforms['audio'], receiver: receiverTransforms['audio']} },
+								// { type: 'video',
+								// 	transforms: { sender: senderTransforms['video'], receiver: receiverTransforms['video']} },
 								{ type: 'data' },
 							],
 							success: function(jsep) {

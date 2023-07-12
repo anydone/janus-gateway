@@ -1531,6 +1531,9 @@ room-<unique room ID>: {
 #define JANUS_VIDEOROOM_AUTHOR			"Meetecho s.r.l."
 #define JANUS_VIDEOROOM_PACKAGE			"janus.plugin.videoroom"
 
+/* Treeleaf */
+static char record_base_dir[] = "/opt/janus/share/janus/data/recordings";
+
 /* Plugin methods */
 janus_plugin *create(void);
 int janus_videoroom_init(janus_callbacks *callback, const char *config_path);
@@ -6485,8 +6488,10 @@ static json_t *janus_videoroom_process_synchronous_request(janus_videoroom_sessi
                         if(start_timestamp){
                             char rec_start_timestamp[64];
                             sprintf(rec_start_timestamp, "%lld", start_timestamp);
-                            char *new_rec_dir = (char*)malloc((strlen(participant->room->rec_dir)+strlen(rec_start_timestamp)+2) * sizeof(char));
-                            strcpy(new_rec_dir, participant->room->rec_dir);
+                            char *new_rec_dir = (char*)malloc(256 * sizeof(char));
+                            strcpy(new_rec_dir, record_base_dir);
+                            strcat(new_rec_dir, "/");
+                            strcat(new_rec_dir, participant->room->room_id_str);
                             strcat(new_rec_dir, "_");
                             strcat(new_rec_dir, rec_start_timestamp);
                             strcat(new_rec_dir, "\0");

@@ -1520,6 +1520,7 @@ room-<unique room ID>: {
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <poll.h>
+#include <stdlib.h>
 
 
 /* Plugin information */
@@ -6439,7 +6440,18 @@ static json_t *janus_videoroom_process_synchronous_request(janus_videoroom_sessi
 		json_t *record = json_object_get(root, "record");
 		gboolean recording_active = json_is_true(record);
 		JANUS_LOG(LOG_VERB, "Enable Recording: %d\n", (recording_active ? 1 : 0));
-		/* Lookup room */
+
+        /* Treeleaf */
+        json_t *timestamp = json_object_get(root, "start_timestamp");
+        long long start_timestamp = 0;
+        if (!json_is_integer(timestamp)) {
+            JANUS_LOG(LOG_ERR, "Error in parsing start_timestamp");
+        }else{
+            start_timestamp = json_integer_value(timestamp);
+        }
+        /* Treeleaf */
+
+        /* Lookup room */
 		janus_mutex_lock(&rooms_mutex);
 		janus_videoroom *videoroom = NULL;
 		error_code = janus_videoroom_access_room(root, TRUE, FALSE, &videoroom, error_cause, sizeof(error_cause));
@@ -6466,7 +6478,24 @@ static json_t *janus_videoroom_process_synchronous_request(janus_videoroom_sessi
 					gboolean prev_recording_active = participant->recording_active;
 					participant->recording_active = recording_active;
 					JANUS_LOG(LOG_VERB, "Setting record property: %s (room %s, user %s)\n",
-						participant->recording_active ? "true" : "false", participant->room_id_str, participant->user_id_str);
+                              participant->recording_active ? "true" : "false", participant->room_id_str, participant->user_id_str);
+
+                    /* Treeleaf */
+                    if(participant->room && participant->room->rec_dir){
+                        if(start_timestamp){
+                            char rec_start_timestamp[64];
+                            sprintf(rec_start_timestamp, "%lld", start_timestamp);
+                            char *new_rec_dir = (char*)malloc((strlen(participant->room->rec_dir)+strlen(rec_start_timestamp)+2) * sizeof(char));
+                            strcpy(new_rec_dir, participant->room->rec_dir);
+                            strcat(new_rec_dir, "_");
+                            strcat(new_rec_dir, rec_start_timestamp);
+                            strcat(new_rec_dir, "\0");
+                            free(participant->room->rec_dir);
+                            participant->room->rec_dir = new_rec_dir;
+                        }
+                    }
+                    /* Treeleaf */
+
 					/* Do we need to do something with the recordings right now? */
 					if(participant->recording_active != prev_recording_active) {
 						/* Something changed */
@@ -8387,7 +8416,7 @@ static void janus_videoroom_recorder_create(janus_videoroom_publisher_stream *ps
 			}
 		} else {
 			/* Build a filename */
-	/* Treeleaf */
+	        /* Treeleaf */
             g_snprintf(filename, 255, "videoroom-%s-user-%s-%s-%"SCNi64"-%s-%d",
             participant->room_id_str, participant->user_id_str,participant->display, now,
             janus_videoroom_media_str(ps->type), ps->mindex);

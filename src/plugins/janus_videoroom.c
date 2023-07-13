@@ -1532,7 +1532,7 @@ room-<unique room ID>: {
 #define JANUS_VIDEOROOM_PACKAGE			"janus.plugin.videoroom"
 
 /* Treeleaf */
-gchar* record_base_dir = g_strdup("/opt/janus/share/janus/data/recordings") ;
+gchar* record_base_dir = NULL;
 
 /* Plugin methods */
 janus_plugin *create(void);
@@ -3258,8 +3258,9 @@ int janus_videoroom_init(janus_callbacks *callback, const char *config_path) {
         /* Treeleaf */
         janus_config_item *record_base_dir_obj = janus_config_get(config, config_general, janus_config_type_item, "rec_dir");
         if(record_base_dir_obj != NULL && record_base_dir_obj->value != NULL){
-            g_free(record_base_dir);
             record_base_dir = g_strdup(record_base_dir_obj->value);
+        } else {
+            record_base_dir = g_strdup("/opt/janus/share/janus/data/recordings");
         }
 	}
 	rooms = g_hash_table_new_full(string_ids ? g_str_hash : g_int64_hash, string_ids ? g_str_equal : g_int64_equal,

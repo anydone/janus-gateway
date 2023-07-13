@@ -1532,7 +1532,7 @@ room-<unique room ID>: {
 #define JANUS_VIDEOROOM_PACKAGE			"janus.plugin.videoroom"
 
 /* Treeleaf */
-static gchar* record_base_dir = g_strdup("/opt/janus/share/janus/data/recordings") ;
+gchar* record_base_dir = g_strdup("/opt/janus/share/janus/data/recordings") ;
 
 /* Plugin methods */
 janus_plugin *create(void);
